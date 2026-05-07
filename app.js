@@ -29,7 +29,7 @@ const ADMIN_EMAIL = "a93386@gmail.com";
 const STUDENT_ACCOUNTS = {
     "紫軒": "a9386@gmail.com", 
     "昵貽": "a9386@gmail.com",   
-    "芳銘": "@gmail.com" 
+    "芳銘": "aliyaliao1103@gmail.com" 
 };
 
 // ==========================================
