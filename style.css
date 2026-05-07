@@ -247,3 +247,12 @@ body {
     box-shadow: 0 8px 20px rgba(108, 92, 231, 0.4);
     border-color: transparent;
 }
+
+/* 🌟 修復手機版漢堡選單圖示不置中的問題 */
+.menu-btn {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    line-height: 1 !important;
+    padding: 10px 15px !important; /* 確保上下左右邊距對稱 */
+}
