@@ -14,23 +14,113 @@
             <p>你的個人化學習儀表板</p>
         </header>
         
-        <main class="flyout-content">
-            <div class="card">
-                <h2>📚 本週重點進度</h2>
-                <p>數學：空間向量與矩陣變換</p>
-                <p>物理：簡諧運動 (SHM) 觀念解析</p>
+<main class="flyout-content">
+            <div id="login-panel" class="card">
+                <h2>👨‍🎓 身分狀態</h2>
+                <p id="user-status">請登入以查看專屬進度與測驗</p>
+                <button id="login-btn" class="primary-btn">使用 Google 帳號登入</button>
             </div>
             
-            <div class="card">
-                <h2>👨‍🎓 學生專區</h2>
-                <p id="user-status">請登入以查看專屬進度與測驗</p>
+<div id="admin-panel" class="card" style="display: none; border-left: 5px solid #e74c3c;">
                 
-                <button id="login-btn" class="primary-btn">使用 Google 帳號登入</button>
-                <button id="logout-btn" class="primary-btn" style="display: none; background-color: #e74c3c;">登出</button>
+<div id="admin-student-list">
+                    <h2>👑 老師控制台：選擇學生</h2>
+                    <p>請選擇你要派發教材的對象 (可複選)：</p>
+                    <div class="grid-container">
+                        <button class="grid-btn admin-student-btn" data-student="紫軒">🧑‍🎓 紫軒</button>
+                        <button class="grid-btn admin-student-btn" data-student="昵貽">🧑‍🎓 昵貽</button>
+                        <button class="grid-btn admin-student-btn" data-student="芳銘">🧑‍🎓 芳銘</button>
+                    </div>
+                    <button id="confirm-students-btn" class="primary-btn" style="margin-top: 25px; background-color: #2c3e50; display: none;">確認選擇並前往派發 ➔</button>
+                </div>
+
+                <div id="admin-task-panel" style="display: none;">
+                    <button id="back-to-students-btn" class="primary-btn" style="background-color: #95a5a6; padding: 8px 16px; width: auto; margin-bottom: 15px;">⬅ 返回學生列表</button>
+                    
+                    <h2 id="admin-selected-student-title" style="color: #e74c3c; margin-top: 0;"></h2>
+                    <p>請點擊左上角選單 (☰) 選擇要上傳「講義」還是「練習題」。</p>
+
+                    <div id="admin-subject-area" style="display: none;">
+                        <div class="grid-container">
+                            <button class="grid-btn admin-subject-btn" data-subject="國文">國文</button>
+                            <button class="grid-btn admin-subject-btn" data-subject="數學">數學</button>
+                            <button class="grid-btn admin-subject-btn" data-subject="英文">英文</button>
+                            <button class="grid-btn admin-subject-btn" data-subject="自然">自然</button>
+                            <button class="grid-btn admin-subject-btn" data-subject="社會">社會</button>
+                        </div>
+                    </div>
+
+                    <div id="admin-upload-area" style="display: none; margin-top: 25px; border-top: 1px dashed #ccc; padding-top: 15px;">
+                        <h3 id="admin-upload-title" style="color: #2c3e50;"></h3>
+                        
+                        <div style="margin-bottom: 15px; background: #f0f3f4; padding: 10px; border-radius: 8px;">
+                            <label style="font-weight: bold; color: #34495e; margin-right: 10px;">📌 請選擇教材模式：</label>
+                            <select id="admin-mode-select" style="padding: 8px; border-radius: 6px; border: 1px solid #bdc3c7; font-family: inherit; font-size: 14px;">
+                                <option value="進度">📖 學校進度</option>
+                                <option value="複習">🎯 學測複習</option>
+                            </select>
+                        </div>
+
+                        <div id="upload-pdf-section" style="display: none;">
+                            <input type="text" id="handout-title" placeholder="講義標題 (例如：空間向量重點整理)" style="width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-family: inherit;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #555;">📎 選擇 PDF 檔案：</label>
+                            <input type="file" id="handout-file" accept=".pdf" style="margin-bottom: 20px; width: 100%;">
+                            <button class="primary-btn" style="background-color: #27ae60;">發布講義 (PDF)</button>
+                        </div>
+
+                        <div id="upload-img-section" style="display: none;">
+                            <input type="text" id="exercise-title" placeholder="題目名稱 (例如：112學測數學單選1)" style="width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-family: inherit;">
+                            <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #555;">🖼️ 選擇題目圖片：</label>
+                            <input type="file" id="exercise-file" accept="image/jpeg, image/png" style="margin-bottom: 15px; width: 100%;">
+                            <textarea placeholder="老師叮嚀或提示 (選填)..." style="width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #ddd; height: 80px; box-sizing: border-box; font-family: inherit; resize: vertical;"></textarea>
+                            <button class="primary-btn" style="background-color: #e67e22;">發布題目 (圖片)</button>
+                        </div>
+                    </div>
+
+                    <div id="admin-history-area" style="display: none; margin-top: 30px; border-top: 2px solid #ecf0f1; padding-top: 20px;">
+                        <h3 style="color: #2c3e50; margin-top: 0;">📋 歷史紀錄與學生繳交狀況</h3>
+                        <div id="admin-history-list">
+                            </div> 
+                    </div>
+                </div>
+
+            </div>
+
+            <div id="student-panel" class="card" style="display: none; border-left: 5px solid #3498db;">
+                <h2 id="section-title">👋 歡迎來到專屬學習區</h2>
+                <p id="section-desc">請點擊左上角選單 (☰) 選擇你要查看「講義」還是「練習題」。</p>
+                
+                <div id="subject-area" style="display: none;">
+                    <div class="grid-container">
+                        <button class="grid-btn subject-btn" data-subject="國文">國文</button>
+                        <button class="grid-btn subject-btn" data-subject="數學">數學</button>
+                        <button class="grid-btn subject-btn" data-subject="英文">英文</button>
+                        <button class="grid-btn subject-btn" data-subject="自然">自然</button>
+                        <button class="grid-btn subject-btn" data-subject="社會">社會</button>
+                    </div>
+                </div>
+
+                <div id="mode-area" style="display: none; margin-top: 25px; border-top: 1px dashed #ccc; padding-top: 15px;">
+                    <h3 id="selected-subject-label" style="margin-top: 0; color: #6c5ce7;"></h3>
+                    <div class="grid-container">
+                        <button class="grid-btn mode-btn" data-mode="進度">📖 學校進度</button>
+                        <button class="grid-btn mode-btn" data-mode="複習">🎯 學測複習</button>
+                    </div>
+                </div>
+
+                <div id="student-task-list" style="margin-top: 20px;"></div>
             </div>
         </main>
+    </div> <div id="top-nav" class="top-nav" style="display: none;">
+        <button id="menu-btn" class="menu-btn">☰</button>
+        <button id="logout-btn" class="logout-btn-fixed">登出</button>
     </div>
 
-    <script></script><script type="module" src="app.js"></script>
+    <div id="sidebar" class="sidebar">
+        <div class="sidebar-item btn-flyout" data-type="講義">📖 觀念講義</div>
+        <div class="sidebar-item btn-flyout" data-type="練習題">✏️ 實戰練習題</div>
+    </div>
+
+    <script type="module" src="app.js"></script>
 </body>
 </html>

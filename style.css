@@ -102,3 +102,148 @@ body {
 .primary-btn:active {
     transform: scale(0.98);
 }
+
+/* ========================================= */
+/* 以下為 Modern Flyout 升級版 UI 樣式 */
+/* ========================================= */
+
+/* 置頂導覽列容器 (修正位置與圖層) */
+.top-nav {
+    position: fixed;
+    top: 20px;
+    left: 0;
+    width: 100vw; /* 佔滿螢幕寬度 */
+    padding: 0 30px;
+    box-sizing: border-box;
+    display: flex;
+    justify-content: space-between; /* 讓選單鈕在左，登出在右 */
+    align-items: center;
+    z-index: 9999; /* 確保在最上層 */
+    pointer-events: none; /* 讓中間空隙可以點擊到下方的卡片 */
+}
+
+/* 讓按鈕本身可以被點擊 */
+.menu-btn, .logout-btn-fixed {
+    pointer-events: auto; 
+}
+
+/* 左上角漢堡選單鈕 (玻璃質感) */
+.menu-btn {
+    background: rgba(255, 255, 255, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: 14px;
+    width: 50px;
+    height: 50px;
+    font-size: 24px;
+    color: #2c3e50;
+    cursor: pointer;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.08);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.menu-btn:hover {
+    background: rgba(255, 255, 255, 0.95);
+    transform: translateY(-3px);
+    box-shadow: 0 12px 20px rgba(0,0,0,0.12);
+}
+
+/* 右上角登出按鈕 (紅色漸層飛出感) */
+.logout-btn-fixed {
+    background: linear-gradient(135deg, #ff7675 0%, #d63031 100%);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 8px 16px rgba(214, 48, 49, 0.3);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.logout-btn-fixed:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 20px rgba(214, 48, 49, 0.4);
+}
+
+/* 側邊滑動選單 (Flyout 面板) */
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: -320px; /* 預設隱藏在畫面外 */
+    width: 300px;
+    height: 100vh;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(25px);
+    -webkit-backdrop-filter: blur(25px);
+    border-right: 1px solid rgba(255, 255, 255, 0.6);
+    box-shadow: 15px 0 40px rgba(0,0,0,0.1);
+    z-index: 9998;
+    transition: left 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    padding-top: 100px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px; /* 按鈕之間的距離 */
+}
+.sidebar.active {
+    left: 0; /* 滑入畫面 */
+}
+
+/* 側邊欄內的選項按鈕化 */
+.sidebar-item {
+    background: white;
+    width: 80%;
+    padding: 18px 20px;
+    border-radius: 16px;
+    font-size: 18px;
+    color: #2c3e50;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    font-weight: bold;
+    text-align: center;
+    border: 1px solid rgba(0,0,0,0.03);
+}
+.sidebar-item:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 10px 24px rgba(0,0,0,0.08);
+    background: #f8f9fa;
+    color: #6c5ce7;
+}
+
+/* 重新塑造科目/模式網格按鈕的質感 */
+.grid-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.grid-btn {
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: 14px;
+    padding: 15px 10px;
+    font-size: 16px;
+    font-weight: bold;
+    color: #495057;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.grid-btn:hover {
+    background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);
+    color: white;
+    border-color: transparent;
+    transform: translateY(-4px);
+    box-shadow: 0 10px 20px rgba(142, 197, 252, 0.4);
+}
+
+/* 學生按鈕被選中時的樣式 */
+.admin-student-btn.selected {
+    background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%) !important;
+    color: white !important;
+    transform: translateY(-3px);
+    box-shadow: 0 8px 20px rgba(108, 92, 231, 0.4);
+    border-color: transparent;
+}
