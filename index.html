@@ -14,16 +14,16 @@
             <p>你的個人化學習儀表板</p>
         </header>
         
-<main class="flyout-content">
+        <main class="flyout-content">
             <div id="login-panel" class="card">
                 <h2>👨‍🎓 身分狀態</h2>
                 <p id="user-status">請登入以查看專屬進度與測驗</p>
                 <button id="login-btn" class="primary-btn">使用 Google 帳號登入</button>
             </div>
             
-<div id="admin-panel" class="card" style="display: none; border-left: 5px solid #e74c3c;">
+            <div id="admin-panel" class="card" style="display: none; border-left: 5px solid #e74c3c;">
                 
-<div id="admin-student-list">
+                <div id="admin-student-list">
                     <h2>👑 老師控制台：選擇學生</h2>
                     <p>請選擇你要派發教材的對象 (可複選)：</p>
                     <div class="grid-container">
@@ -79,11 +79,9 @@
 
                     <div id="admin-history-area" style="display: none; margin-top: 30px; border-top: 2px solid #ecf0f1; padding-top: 20px;">
                         <h3 style="color: #2c3e50; margin-top: 0;">📋 歷史紀錄與學生繳交狀況</h3>
-                        <div id="admin-history-list">
-                            </div> 
+                        <div id="admin-history-list"></div> 
                     </div>
                 </div>
-
             </div>
 
             <div id="student-panel" class="card" style="display: none; border-left: 5px solid #3498db;">
@@ -111,7 +109,9 @@
                 <div id="student-task-list" style="margin-top: 20px;"></div>
             </div>
         </main>
-    </div> <div id="top-nav" class="top-nav" style="display: none;">
+    </div> 
+
+    <div id="top-nav" class="top-nav" style="display: none;">
         <button id="menu-btn" class="menu-btn">☰</button>
         <button id="logout-btn" class="logout-btn-fixed">登出</button>
     </div>
