@@ -25,12 +25,6 @@ const db = getFirestore(app);
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/djyt6fh9g/auto/upload";
 const CLOUDINARY_UPLOAD_PRESET = "zazj8sfj";
 
-const ADMIN_EMAIL = "a93386@gmail.com"; 
-const STUDENT_ACCOUNTS = {
-    "紫軒": "nicole980111@gmail.com", 
-    "昵貽": "chenn5571@gmail.com",   
-    "芳銘": "aliyaliao1103@gmail.com" 
-};
 
 // ==========================================
 // 3. 全域狀態變數與 HTML 元素抓取
@@ -83,7 +77,7 @@ const selectedSubjectLabel = document.getElementById('selected-subject-label');
 const studentTaskList = document.getElementById('student-task-list');
 
 // ==========================================
-// 4. 登入、登出與身分驗證邏輯
+// 4. 登入、登出與身分驗證邏輯 (家教網 2.0 雲端版)
 // ==========================================
 loginBtn.addEventListener('click', () => {
     signInWithPopup(auth, provider).catch(error => console.error("登入失敗：", error));
@@ -93,33 +87,41 @@ logoutBtn.addEventListener('click', () => {
     signOut(auth).catch(error => console.error("登出失敗：", error));
 });
 
-onAuthStateChanged(auth, (user) => {
+// 🌟 注意這裡的 callback 函式加上了 async，因為我們要等待資料庫回應
+onAuthStateChanged(auth, async (user) => {
     if (user) {
+        // 先顯示基礎框架，讓使用者知道正在載入
         loginPanel.style.display = 'none'; 
         topNav.style.display = 'flex';     
         menuBtn.style.display = 'block'; 
 
-        if (user.email === ADMIN_EMAIL) {
-            // 老師身分
-            isAdmin = true;
-            currentLoggedInStudent = ""; 
-            adminPanel.style.display = 'block';
-            studentPanel.style.display = 'none';
-            adminStudentList.style.display = 'block';
-            adminTaskPanel.style.display = 'none';
-        } else {
-            // 學生身分判斷
-            let foundStudent = "";
-            for (const [name, email] of Object.entries(STUDENT_ACCOUNTS)) {
-                if (user.email === email) {
-                    foundStudent = name;
-                    break;
-                }
+        try {
+            // 🔍 向 Firestore 查詢這個信箱有沒有在 VIP 名單 (users 集合) 裡
+            const q = query(collection(db, "users"), where("email", "==", user.email));
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                // ❌ 找不到資料：不在名單內的陌生人
+                alert("⛔ 抱歉，此 Google 帳號未授權使用本系統！請使用老師指定的帳號登入。");
+                signOut(auth); // 強制登出
+                return; // 提早結束函式
             }
 
-            if (foundStudent) {
+            // ✅ 找到資料了！把這名使用者的身分 (role) 與姓名 (name) 取出來
+            const userData = querySnapshot.docs[0].data();
+
+            if (userData.role === "admin") {
+                // 👑 老師身分
+                isAdmin = true;
+                currentLoggedInStudent = ""; 
+                adminPanel.style.display = 'block';
+                studentPanel.style.display = 'none';
+                adminStudentList.style.display = 'block';
+                adminTaskPanel.style.display = 'none';
+            } else if (userData.role === "student") {
+                // 🧑‍🎓 學生身分
                 isAdmin = false;
-                currentLoggedInStudent = foundStudent; 
+                currentLoggedInStudent = userData.name; // 從資料庫動態抓出他的名字
                 adminPanel.style.display = 'none';
                 studentPanel.style.display = 'block';
                 
@@ -129,11 +131,14 @@ onAuthStateChanged(auth, (user) => {
                 subjectArea.style.display = 'none';
                 modeArea.style.display = 'none';
                 studentTaskList.innerHTML = '';
-            } else {
-                alert("⛔ 抱歉，此 Google 帳號未授權使用本系統！請使用老師指定的帳號登入。");
-                signOut(auth);
             }
+
+        } catch (error) {
+            console.error("驗證身分時發生錯誤：", error);
+            alert("伺服器連線異常，請稍後再試。");
+            signOut(auth); // 若資料庫出錯為求安全先登出
         }
+
     } else {
         // 未登入狀態
         isAdmin = false;
@@ -258,6 +263,36 @@ async function uploadFileToCloudinary(file) {
     const data = await response.json();
     return { url: data.secure_url, publicId: data.public_id };
 }
+// 【新增武器 A】使用 Promise.all 讓多張圖片「同時」平行上傳，節省時間
+async function uploadMultipleFilesToCloudinary(files) {
+    const uploadPromises = Array.from(files).map(file => uploadFileToCloudinary(file));
+    return await Promise.all(uploadPromises); // 回傳的是一個包含所有物件的陣列
+}
+
+// 【新增武器 B】專門用來生成「水平卡片展廳」的小工具，完美向下相容舊資料
+function generateGalleryHTML(urlData, badgeColor = "#3498db") {
+    let urls = [];
+    // 兼容舊版的單一字串 (url) 與新版的陣列 (urls)
+    if (Array.isArray(urlData)) {
+        urls = urlData;
+    } else if (typeof urlData === "string" && urlData !== "") {
+        urls = [urlData];
+    }
+
+    if (urls.length === 0) return "";
+
+    let html = `<div class="image-gallery">`;
+    urls.forEach((url, index) => {
+        html += `
+            <div class="image-card">
+                <div class="image-badge" style="background-color: ${badgeColor};">${index + 1}</div>
+                <img src="${url}" onclick="window.open(this.src)">
+            </div>
+        `;
+    });
+    html += `</div>`;
+    return html;
+}
 
 // 6-6. 發布講義 (PDF)
 publishPdfBtn.addEventListener('click', async () => {
@@ -303,14 +338,14 @@ publishPdfBtn.addEventListener('click', async () => {
     }
 });
 
-// 6-7. 發布題目 (圖片)
+// 6-7. 發布題目 (圖片) - 多圖陣列升級版
 publishImgBtn.addEventListener('click', async () => {
     const title = exerciseTitleInput.value;
-    const file = exerciseFileInput.files[0];
+    const files = exerciseFileInput.files; // 🌟 改成抓取所有檔案
     const hint = exerciseHintInput.value;
 
-    if (!title || !file) {
-        alert("請完整輸入題目名稱並選擇圖片！");
+    if (!title || files.length === 0) {
+        alert("請完整輸入題目名稱並至少選擇一張圖片！");
         return;
     }
 
@@ -318,7 +353,10 @@ publishImgBtn.addEventListener('click', async () => {
         publishImgBtn.innerText = "上傳中...";
         publishImgBtn.disabled = true;
 
-        const uploadResult = await uploadFileToCloudinary(file);
+        // 🌟 呼叫多圖上傳武器，並把結果拆成兩個陣列 (網址陣列、雲端ID陣列)
+        const uploadResults = await uploadMultipleFilesToCloudinary(files);
+        const fileUrls = uploadResults.map(res => res.url);
+        const cloudinaryIds = uploadResults.map(res => res.publicId);
 
         const promises = selectedStudents.map(student => {
             return addDoc(collection(db, "tasks"), {
@@ -328,10 +366,11 @@ publishImgBtn.addEventListener('click', async () => {
                 mode: adminModeSelect.value,
                 title: title,
                 hint: hint,
-                fileUrl: uploadResult.url,
-                cloudinaryId: uploadResult.publicId,
+                fileUrls: fileUrls,             // 🌟 存入陣列
+                cloudinaryIds: cloudinaryIds,   // 🌟 存入陣列
                 status: "未完成",
-                studentReplyUrl: "",
+                studentReplyUrls: [],           // 🌟 預留空陣列給學生
+                teacherFeedbackUrls: [],        // 🌟 預留空陣列給批改
                 timestamp: serverTimestamp()
             });
         });
@@ -390,15 +429,29 @@ async function loadAdminHistory() {
 
             if (task.type === "講義") {
                 htmlContent += `
-                    <h4 style="margin-top:0; color:#2980b9; padding-right: 40px;">📄 ${task.title} ${modeBadge}</h4>
+                    <div style="padding-right: 50px; margin-bottom: 10px;">
+    <h4 style="margin: 0 0 8px 0; color:#e67e22; line-height: 1.4; word-break: break-word;">📝 ${task.title}</h4>
+    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+        ${modeBadge}
+    </div>
+</div>
                     <p style="font-size: 10px; color: #bdc3c7; margin-bottom: 5px;">雲端 ID: ${task.cloudinaryId || '無'}</p>
                     <a href="${task.fileUrl}" target="_blank" class="primary-btn" style="display:inline-block; text-decoration:none; background-color:#3498db; padding: 8px 15px; width:auto;">查看已發布講義</a>
                 `;
-            } else if (task.type === "練習題") {
+} else if (task.type === "練習題") {
+                const cloudIdsDisplay = task.cloudinaryIds ? task.cloudinaryIds.join(', ') : (task.cloudinaryId || '無');
                 htmlContent += `
-                    <h4 style="margin-top:0; color:#e67e22; padding-right: 40px;">📝 ${task.title} ${modeBadge}</h4>
-                    <p style="font-size: 10px; color: #bdc3c7; margin-bottom: 5px;">雲端 ID: ${task.cloudinaryId || '無'}</p>
-                    <a href="${task.fileUrl}" target="_blank" style="color: #3498db; text-decoration: underline; font-size: 14px;">🔍 查看原題目圖片</a>
+                    <div style="padding-right: 50px; margin-bottom: 10px;">
+    <h4 style="margin: 0 0 8px 0; color:#e67e22; line-height: 1.4; word-break: break-word;">📝 ${task.title}</h4>
+    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+        ${modeBadge}
+    </div>
+</div>
+                    <p style="font-size: 10px; color: #bdc3c7; margin-bottom: 5px; word-break: break-all;">雲端 IDs: ${cloudIdsDisplay}</p>
+                    <div style="margin-bottom: 10px;">
+                        <span style="color: #e67e22; font-weight: bold;">🔍 原題目圖片：</span>
+                        ${generateGalleryHTML(task.fileUrls || task.fileUrl, '#e67e22')}
+                    </div>
                     <div style="margin-top: 15px;">
                 `;
 
@@ -410,13 +463,16 @@ async function loadAdminHistory() {
                                     ✅ 學生已繳交作業 (點擊展開)
                                 </summary>
                                 <div style="margin-top: 12px;">
-                                    <img src="${task.studentReplyUrl}" style="width: 100%; max-width: 300px; border-radius: 8px; cursor: zoom-in;" onclick="window.open(this.src)">
+                                    ${generateGalleryHTML(task.studentReplyUrls || task.studentReplyUrl, '#27ae60')}
                                 </div>
                             </details>
                         </div>
                     `;
 
-                    if (task.teacherFeedbackUrl) {
+                    // 注意！防呆：判斷舊資料字串或新資料陣列長度
+                    const hasFeedback = task.teacherFeedbackUrls?.length > 0 || !!task.teacherFeedbackUrl;
+
+                    if (hasFeedback) {
                         htmlContent += `
                             <div style="margin-top: 15px; background: #f4ecf7; border-left: 4px solid #8e44ad; padding: 10px; border-radius: 4px; position: relative;">
                                 <details style="cursor: pointer;">
@@ -424,7 +480,7 @@ async function loadAdminHistory() {
                                         👩‍🏫 已回傳批改 (點擊展開)
                                     </summary>
                                     <div style="margin-top: 12px;">
-                                        <img src="${task.teacherFeedbackUrl}" style="width: 100%; max-width: 300px; border-radius: 8px; cursor: zoom-in;" onclick="window.open(this.src)">
+                                        ${generateGalleryHTML(task.teacherFeedbackUrls || task.teacherFeedbackUrl, '#8e44ad')}
                                         <button class="admin-retract-feedback-btn" data-id="${task.id}" style="margin-top: 10px; background: #fff; border: 1px solid #8e44ad; color: #8e44ad; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; width: 100%;">
                                             🔄 傳錯了？收回此批改
                                         </button>
@@ -435,9 +491,9 @@ async function loadAdminHistory() {
                     } else {
                         htmlContent += `
                             <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px;">
-                                <label style="font-weight: bold; color: #8e44ad; display: block; margin-bottom: 8px;">👩‍🏫 上傳批改後的圖片：</label>
-                                <input type="file" id="feedback-file-${task.id}" accept="image/jpeg, image/png" style="width: 100%; margin-bottom: 10px;">
-                                <button class="primary-btn admin-submit-feedback-btn" data-id="${task.id}" style="background-color: #8e44ad; padding: 8px 15px; width: auto;">送出批改</button>
+                                <label style="font-weight: bold; color: #8e44ad; display: block; margin-bottom: 8px;">👩‍🏫 上傳批改後的圖片 (可多選)：</label>
+                                <input type="file" id="feedback-file-${task.id}" accept="image/jpeg, image/png" multiple style="width: 100%; margin-bottom: 10px;">
+                                <button class="primary-btn admin-submit-feedback-btn" data-id="${task.id}" style="background-color: #8e44ad; padding: 8px 15px; width: auto;">送出多張批改</button>
                             </div>
                         `;
                     }
@@ -501,6 +557,7 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
             querySnapshot.forEach((documentSnapshot) => {
                 const task = documentSnapshot.data();
                 const taskId = documentSnapshot.id; 
+                const modeBadge = task.mode ? `<span style="background: #95a5a6; color: white; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">${task.mode}</span>` : '';
 
                 const taskCard = document.createElement('div');
                 taskCard.className = 'card';
@@ -517,13 +574,18 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
                         </div>
                     `;
                 }
-                else if (task.type === "練習題") {
+else if (task.type === "練習題") {
                     const isCompleted = task.status === "已完成";
-                    const hasFeedback = !!task.teacherFeedbackUrl; 
+                    const hasFeedback = task.teacherFeedbackUrls?.length > 0 || !!task.teacherFeedbackUrl; 
                     const detailsOpenAttr = isCompleted ? "" : "open"; 
 
                     let innerHTML = `
-                        <h3 style="margin-top:0; color:#2c3e50;">📝 ${task.title}</h3>
+                        <div style="padding-right: 50px; margin-bottom: 10px;">
+    <h3 style="margin: 0 0 8px 0; color:#2c3e50; line-height: 1.4; word-break: break-word;">📝 ${task.title}</h3>
+    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+        ${modeBadge}
+    </div>
+</div>
                         ${task.hint ? `<p style="background:#fff3cd; padding:10px; border-radius:8px; color:#856404;">💡 老師叮嚀：${task.hint}</p>` : ''}
                         
                         <details ${detailsOpenAttr} style="cursor: pointer; margin-bottom: 15px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0;">
@@ -531,7 +593,7 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
                                 🖼️ 點擊展開/收合題目圖片
                             </summary>
                             <div style="margin-top: 10px;">
-                                <img src="${task.fileUrl}" style="width:100%; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+                                ${generateGalleryHTML(task.fileUrls || task.fileUrl, '#e67e22')}
                             </div>
                         </details>
 
@@ -545,7 +607,7 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
                                     ✅ 已繳交作業 (點擊展開查看解答)
                                 </summary>
                                 <div style="margin-top: 12px;">
-                                    <img src="${task.studentReplyUrl}" style="width: 100%; border-radius: 8px; cursor: zoom-in;" onclick="window.open(this.src)">
+                                    ${generateGalleryHTML(task.studentReplyUrls || task.studentReplyUrl, '#27ae60')}
                                 </div>
                             </details>
                         `;
@@ -558,7 +620,7 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
                                             👩‍🏫 老師的批改回饋 (點擊收合)
                                         </summary>
                                         <div style="margin-top: 12px;">
-                                            <img src="${task.teacherFeedbackUrl}" style="width: 100%; border-radius: 8px; cursor: zoom-in;" onclick="window.open(this.src)">
+                                            ${generateGalleryHTML(task.teacherFeedbackUrls || task.teacherFeedbackUrl, '#8e44ad')}
                                         </div>
                                     </details>
                                 </div>
@@ -571,9 +633,10 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
                             `;
                         }
                     } else {
+                        // 未繳交狀態
                         innerHTML += `
                             <h4 style="margin-top:0;">上傳你的解答：</h4>
-                            <input type="file" id="reply-file-${taskId}" accept="image/jpeg, image/png" style="margin-bottom: 10px; width: 100%;">
+                            <input type="file" id="reply-file-${taskId}" accept="image/jpeg, image/png" multiple style="margin-bottom: 10px; width: 100%;">
                             <button class="primary-btn submit-reply-btn" data-id="${taskId}" style="background-color:#27ae60;">繳交作業</button>
                         `;
                     }
@@ -588,23 +651,19 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     const taskId = e.target.getAttribute('data-id');
                     const fileInput = document.getElementById(`reply-file-${taskId}`);
-                    const file = fileInput.files[0];
-
-                    if (!file) {
-                        alert("請先選擇你的解答照片！");
-                        return;
-                    }
+                    const files = fileInput.files;
+                    if (files.length === 0) { alert("請先選擇至少一張解答照片！"); return; }
 
                     try {
-                        btn.innerText = "上傳中...";
+                        btn.innerText = "上傳多圖中...";
                         btn.disabled = true;
 
-                        const uploadResult = await uploadFileToCloudinary(file);
-                        const taskRef = doc(db, "tasks", taskId);
+                        const uploadResults = await uploadMultipleFilesToCloudinary(files);
+                        const replyUrls = uploadResults.map(res => res.url);
                         
-                        await updateDoc(taskRef, {
+                        await updateDoc(doc(db, "tasks", taskId), {
                             status: "已完成",
-                            studentReplyUrl: uploadResult.url,
+                            studentReplyUrls: replyUrls,
                             replyTimestamp: serverTimestamp()
                         });
 
@@ -615,7 +674,7 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
                                     ✅ 作業繳交成功！ (點擊展開查看)
                                 </summary>
                                 <div style="margin-top: 12px;">
-                                    <img src="${uploadResult.url}" style="width: 100%; border-radius: 8px; cursor: zoom-in; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" onclick="window.open(this.src)">
+                                    ${generateGalleryHTML(replyUrls, '#27ae60')}
                                 </div>
                             </details>
                         `;
@@ -657,22 +716,20 @@ document.body.addEventListener('click', async (e) => {
     }
 
     // 【老師】上傳批改圖片
-    if (e.target.classList.contains('admin-submit-feedback-btn')) {
+if (e.target.classList.contains('admin-submit-feedback-btn')) {
         const taskId = e.target.getAttribute('data-id');
         const fileInput = document.getElementById(`feedback-file-${taskId}`);
-        const file = fileInput.files[0];
+        const files = fileInput.files;
         
-        if (!file) {
-            alert("請先選擇批改後的圖片！");
-            return;
-        }
+        if (files.length === 0) { alert("請先選擇至少一張批改圖片！"); return; }
+        
         try {
-            e.target.innerText = "上傳中...";
+            e.target.innerText = "上傳多圖中...";
             e.target.disabled = true;
-            const uploadResult = await uploadFileToCloudinary(file);
-            await updateDoc(doc(db, "tasks", taskId), {
-                teacherFeedbackUrl: uploadResult.url 
-            });
+            const uploadResults = await uploadMultipleFilesToCloudinary(files);
+            const feedbackUrls = uploadResults.map(res => res.url);
+            
+            await updateDoc(doc(db, "tasks", taskId), { teacherFeedbackUrls: feedbackUrls });
             alert("👩‍🏫 批改送出成功！");
             loadAdminHistory(); 
         } catch (error) {

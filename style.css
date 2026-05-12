@@ -256,3 +256,105 @@ body {
     line-height: 1 !important;
     padding: 10px 15px !important; /* 確保上下左右邊距對稱 */
 }
+
+/* ==========================================
+   🌟 家教網 2.0：多圖水平滑動展廳
+   ========================================== */
+.image-gallery {
+    display: flex;
+    overflow-x: auto;
+    gap: 20px;
+    padding: 15px 10px 25px 10px; /* 底部多留空間給陰影和卷軸 */
+    scroll-snap-type: x mandatory; /* 讓滑動時有吸附的感覺 */
+}
+
+.image-card {
+    position: relative;
+    flex: 0 0 auto; /* 防止卡片被擠壓變形 */
+    width: 85%; /* 設定 85% 可以稍微露出下一張圖的邊緣，暗示可以滑動 */
+    max-width: 350px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+    padding: 10px;
+    scroll-snap-align: center;
+}
+
+.image-card img {
+    width: 100%;
+    border-radius: 4px;
+    display: block;
+    cursor: zoom-in;
+}
+
+.image-badge {
+    position: absolute;
+    top: -12px;
+    left: -12px;
+    color: white;
+    font-weight: bold;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+    font-size: 14px;
+    z-index: 2;
+}
+
+/* 美化自訂卷軸，讓它看起來更精緻 */
+.image-gallery::-webkit-scrollbar {
+    height: 8px;
+}
+.image-gallery::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+.image-gallery::-webkit-scrollbar-thumb {
+    background: #bdc3c7;
+    border-radius: 4px;
+}
+.image-gallery::-webkit-scrollbar-thumb:hover {
+    background: #95a5a6;
+}
+
+/* 📱 針對手機版 (寬度小於 480px) 的 UI 優化 */
+@media (max-width: 480px) {
+    /* 1. 讓作業項目的標題區塊具備彈性，避免按鈕遮擋 */
+    .task-item {
+        position: relative;
+        padding-top: 15px !important; /* 增加上方空間 */
+    }
+
+    /* 2. 強制讓標題與標籤換行排列，不再硬擠在同一行 */
+    .task-item h4 {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding-right: 35px !important; /* 為右邊的垃圾桶按鈕預留空間 */
+        line-height: 1.4;
+        margin-bottom: 10px;
+    }
+
+    /* 3. 調整標籤 (進度/複習/學測) 的大小，使其更適合手機閱讀 */
+    .task-item h4 span {
+        font-size: 11px !important;
+        padding: 2px 8px !important;
+        white-space: nowrap; /* 防止標籤內的文字自己又換行 */
+    }
+
+    /* 4. 確保刪除按鈕固定在右上角，且不會壓在文字正上方 */
+    .delete-task-btn, .admin-retract-feedback-btn {
+        top: 15px !important;
+        right: 10px !important;
+    }
+
+    /* 5. 調整圖片卡片在手機上的寬度，讓它看起來更滿一點 */
+    .image-card {
+        width: 90% !important;
+        max-width: 280px;
+    }
+}
