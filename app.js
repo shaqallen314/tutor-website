@@ -261,7 +261,10 @@ async function uploadFileToCloudinary(file) {
     }
     
     const data = await response.json();
-    return { url: data.secure_url, publicId: data.public_id };
+    let finalUrl = data.secure_url;
+    finalUrl = finalUrl.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
+
+    return { url: finalUrl, publicId: data.public_id };
 }
 // 【新增武器 A】使用 Promise.all 讓多張圖片「同時」平行上傳，節省時間
 async function uploadMultipleFilesToCloudinary(files) {
@@ -311,7 +314,7 @@ publishPdfBtn.addEventListener('click', async () => {
         const uploadResult = await uploadFileToCloudinary(file);
 
         await addDoc(collection(db, "tasks"), {
-                student: selectedStudents,
+                students: selectedStudents,
                 subject: currentSubject,
                 type: "講義",
                 mode: adminModeSelect.value,
@@ -406,7 +409,7 @@ async function loadAdminHistory() {
 
     try {
         const q = query(collection(db, "tasks"),
-            where("student", "==", adminSelectedStudent),
+            where("students", "array-contains", adminSelectedStudent),
             where("subject", "==", currentSubject),
             where("type", "==", currentType)
         );
@@ -433,6 +436,12 @@ async function loadAdminHistory() {
             htmlContent += `<button class="admin-delete-task-btn" data-id="${task.id}" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 16px; font-weight: bold;">🗑️ 刪除</button>`;
 
             const modeBadge = task.mode ? `<span style="background: #bdc3c7; color: #fff; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-left: 10px;">${task.mode}</span>` : "";
+            
+            // 🌟 新增：完美相容新舊資料的學生名字顯示邏輯
+            const studentsDisplay = task.students ? task.students.join('、') : (task.student || '未指定');
+
+            // 🌟 新增：在卡片最上方顯示這份作業是發給誰的
+            htmlContent += `<p style="margin: 0 0 10px 0; font-size: 13px; color: #7f8c8d; font-weight: bold;">🧑‍🎓 對象學生：<span style="color: #2c3e50;">${studentsDisplay}</span></p>`;
 
             if (task.type === "講義") {
                 htmlContent += `
@@ -499,7 +508,7 @@ async function loadAdminHistory() {
                         htmlContent += `
                             <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px;">
                                 <label style="font-weight: bold; color: #8e44ad; display: block; margin-bottom: 8px;">👩‍🏫 上傳批改後的圖片 (可多選)：</label>
-                                <input type="file" id="feedback-file-${task.id}" accept="image/jpeg, image/png" multiple style="width: 100%; margin-bottom: 10px;">
+                                <input type="file" id="feedback-file-${task.id}" accept="image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="width: 100%; margin-bottom: 10px;">
                                 <button class="primary-btn admin-submit-feedback-btn" data-id="${task.id}" style="background-color: #8e44ad; padding: 8px 15px; width: auto;">送出多張批改</button>
                             </div>
                         `;
@@ -547,7 +556,7 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 
         try {
             const q = query(collection(db, "tasks"),
-                where("students", "array-contains", currentLoggedInStudent, 
+                where("students", "array-contains", currentLoggedInStudent), 
                 where("subject", "==", currentSubject),
                 where("type", "==", currentType),
                 where("mode", "==", currentMode)
@@ -643,7 +652,7 @@ else if (task.type === "練習題") {
                         // 未繳交狀態
                         innerHTML += `
                             <h4 style="margin-top:0;">上傳你的解答：</h4>
-                            <input type="file" id="reply-file-${taskId}" accept="image/jpeg, image/png" multiple style="margin-bottom: 10px; width: 100%;">
+                            <input type="file" id="reply-file-${taskId}" accept="image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="margin-bottom: 10px; width: 100%;">
                             <button class="primary-btn submit-reply-btn" data-id="${taskId}" style="background-color:#27ae60;">繳交作業</button>
                         `;
                     }
