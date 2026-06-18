@@ -310,9 +310,8 @@ publishPdfBtn.addEventListener('click', async () => {
 
         const uploadResult = await uploadFileToCloudinary(file);
 
-        const promises = selectedStudents.map(student => {
-            return addDoc(collection(db, "tasks"), {
-                student: student,
+        await addDoc(collection(db, "tasks"), {
+                student: selectedStudents,
                 subject: currentSubject,
                 type: "講義",
                 mode: adminModeSelect.value,
@@ -322,10 +321,10 @@ publishPdfBtn.addEventListener('click', async () => {
                 cloudinaryId: uploadResult.publicId,
                 timestamp: serverTimestamp()
             });
-        });
-        await Promise.all(promises);
+        
 
         alert(`🎉 講義已成功發布給：${selectedStudents.join('、')}！`);
+        
         handoutTitleInput.value = "";
         handoutFileInput.value = "";
         loadAdminHistory();
@@ -338,14 +337,18 @@ publishPdfBtn.addEventListener('click', async () => {
     }
 });
 
-// 6-7. 發布題目 (圖片) - 多圖陣列升級版
+// ==========================================
+// 6-7. 發布題目 (圖片) - 2.5 陣列共享完整升級版
+// ==========================================
 publishImgBtn.addEventListener('click', async () => {
     const title = exerciseTitleInput.value;
-    const files = exerciseFileInput.files; // 🌟 改成抓取所有檔案
+    const files = exerciseFileInput.files; 
     const hint = exerciseHintInput.value;
 
-    if (!title || files.length === 0) {
-        alert("請完整輸入題目名稱並至少選擇一張圖片！");
+    // 💡 防呆機制：確保有輸入標題、有選圖片、且「至少勾選了一位學生」
+    // selectedStudents 是你原本在前端用來收集勾選名字的陣列 (例如: ["紫軒", "昵貽"])
+    if (!title || files.length === 0 || selectedStudents.length === 0) {
+        alert("請完整輸入題目名稱、選擇學生並至少上傳一張圖片！");
         return;
     }
 
@@ -353,34 +356,38 @@ publishImgBtn.addEventListener('click', async () => {
         publishImgBtn.innerText = "上傳中...";
         publishImgBtn.disabled = true;
 
-        // 🌟 呼叫多圖上傳武器，並把結果拆成兩個陣列 (網址陣列、雲端ID陣列)
+        // 呼叫我們先前寫好的多圖上傳函式
         const uploadResults = await uploadMultipleFilesToCloudinary(files);
         const fileUrls = uploadResults.map(res => res.url);
         const cloudinaryIds = uploadResults.map(res => res.publicId);
 
-        const promises = selectedStudents.map(student => {
-            return addDoc(collection(db, "tasks"), {
-                student: student,
-                subject: currentSubject,
-                type: "練習題",
-                mode: adminModeSelect.value,
-                title: title,
-                hint: hint,
-                fileUrls: fileUrls,             // 🌟 存入陣列
-                cloudinaryIds: cloudinaryIds,   // 🌟 存入陣列
-                status: "未完成",
-                studentReplyUrls: [],           // 🌟 預留空陣列給學生
-                teacherFeedbackUrls: [],        // 🌟 預留空陣列給批改
-                timestamp: serverTimestamp()
-            });
+        // 🌟 2.5版核心改動：不再需要用迴圈重複建立多份文件！
+        // 我們直接呼叫一次 addDoc，建立「單一筆」文件
+        await addDoc(collection(db, "tasks"), {
+            students: selectedStudents,     // 🌟 直接把前端的學生名字陣列存進去！
+            subject: currentSubject,
+            type: "練習題",
+            mode: adminModeSelect.value,
+            title: title,
+            hint: hint,
+            fileUrls: fileUrls,             
+            cloudinaryIds: cloudinaryIds,   
+            status: "未完成",
+            studentReplyUrls: [],           // 預留空陣列給學生多圖繳交
+            teacherFeedbackUrls: [],        // 預留空陣列給老師多圖批改
+            timestamp: serverTimestamp()
         });
-        await Promise.all(promises);
 
-        alert(`🎉 題目已成功發布給：${selectedStudents.join('、')}！`);
+        alert(`🎉 題目已成功發布！勾選的學生們將能同時共享此資料。`);
+        
+        // 清空輸入欄位
         exerciseTitleInput.value = "";
         exerciseFileInput.value = "";
         exerciseHintInput.value = "";
-        loadAdminHistory();
+        
+        // 💡 記得在這裡加上你原本用來把前端 Checkbox 勾選狀態清空、以及重設 selectedStudents = [] 的程式碼
+        
+        loadAdminHistory(); // 重新整理老師後台歷史紀錄
     } catch (error) {
         console.error(error);
         alert("發布失敗，請檢查控制台。");
@@ -540,7 +547,7 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
 
         try {
             const q = query(collection(db, "tasks"),
-                where("student", "==", currentLoggedInStudent), 
+                where("students", "array-contains", currentLoggedInStudent, 
                 where("subject", "==", currentSubject),
                 where("type", "==", currentType),
                 where("mode", "==", currentMode)
