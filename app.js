@@ -272,10 +272,9 @@ async function uploadMultipleFilesToCloudinary(files) {
     return await Promise.all(uploadPromises); // 回傳的是一個包含所有物件的陣列
 }
 
-// 【新增武器 B】專門用來生成「水平卡片展廳」的小工具，完美向下相容舊資料
+// 【升級版武器 B】專門用來生成「水平卡片展廳」的小工具，自動辨識圖片與 PDF
 function generateGalleryHTML(urlData, badgeColor = "#3498db") {
     let urls = [];
-    // 兼容舊版的單一字串 (url) 與新版的陣列 (urls)
     if (Array.isArray(urlData)) {
         urls = urlData;
     } else if (typeof urlData === "string" && urlData !== "") {
@@ -286,10 +285,19 @@ function generateGalleryHTML(urlData, badgeColor = "#3498db") {
 
     let html = `<div class="image-gallery">`;
     urls.forEach((url, index) => {
+        // 🌟 核心魔法：判斷網址是否為 PDF (忽略大小寫與網址參數)
+        const isPdf = url.toLowerCase().split('?')[0].endsWith('.pdf');
+
         html += `
-            <div class="image-card">
-                <div class="image-badge" style="background-color: ${badgeColor};">${index + 1}</div>
-                <img src="${url}" onclick="window.open(this.src)">
+            <div class="image-card" style="display: flex; flex-direction: column; justify-content: center; align-items: center; background: #fdfdfd;">
+                <div class="image-badge" style="background-color: ${badgeColor}; z-index: 10;">${index + 1}</div>
+                ${isPdf 
+                    ? `<a href="${url}" target="_blank" style="text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; min-height: 120px; color: ${badgeColor};">
+                           <span style="font-size: 40px; margin-bottom: 8px;">📄</span>
+                           <span style="font-weight: bold; font-size: 14px;">點擊查看 PDF</span>
+                       </a>`
+                    : `<img src="${url}" onclick="window.open(this.src)" style="cursor: pointer; object-fit: cover; width: 100%; height: 100%;">`
+                }
             </div>
         `;
     });
@@ -508,7 +516,7 @@ async function loadAdminHistory() {
                         htmlContent += `
                             <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px;">
                                 <label style="font-weight: bold; color: #8e44ad; display: block; margin-bottom: 8px;">👩‍🏫 上傳批改後的圖片 (可多選)：</label>
-                                <input type="file" id="feedback-file-${task.id}" accept="image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="width: 100%; margin-bottom: 10px;">
+                                <input type="file" id="feedback-file-${task.id}" accept="application/pdf, .pdf, image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="width: 100%; margin-bottom: 10px;">
                                 <button class="primary-btn admin-submit-feedback-btn" data-id="${task.id}" style="background-color: #8e44ad; padding: 8px 15px; width: auto;">送出多張批改</button>
                             </div>
                         `;
@@ -652,7 +660,7 @@ else if (task.type === "練習題") {
                         // 未繳交狀態
                         innerHTML += `
                             <h4 style="margin-top:0;">上傳你的解答：</h4>
-                            <input type="file" id="reply-file-${taskId}" accept="image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="margin-bottom: 10px; width: 100%;">
+                            <input type="file" id="reply-file-${taskId}" accept="application/pdf, .pdf, image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="margin-bottom: 10px; width: 100%;">
                             <button class="primary-btn submit-reply-btn" data-id="${taskId}" style="background-color:#27ae60;">繳交作業</button>
                         `;
                     }
