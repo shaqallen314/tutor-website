@@ -240,7 +240,9 @@ body {
 }
 
 /* 學生按鈕被選中時的樣式 */
-.admin-student-btn.selected {
+.admin-student-btn.selected,
+.subject-btn.selected,
+.mode-btn.selected {
     background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%) !important;
     color: white !important;
     transform: translateY(-3px);

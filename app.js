@@ -131,6 +131,9 @@ onAuthStateChanged(auth, async (user) => {
                 subjectArea.style.display = 'none';
                 modeArea.style.display = 'none';
                 studentTaskList.innerHTML = '';
+                if(document.getElementById('search-area')) document.getElementById('search-area').style.display = 'none';
+                if(document.getElementById('student-dashboard')) document.getElementById('student-dashboard').style.display = 'block';
+                if(typeof loadStudentDashboard === "function") loadStudentDashboard();
             }
 
         } catch (error) {
@@ -176,6 +179,10 @@ document.querySelectorAll('.sidebar-item').forEach(item => {
             sectionDesc.innerText = "請選擇科目：";
             subjectArea.style.display = 'block';
             modeArea.style.display = 'none'; 
+            document.querySelectorAll('.subject-btn, .mode-btn').forEach(btn => btn.classList.remove('selected'));
+            if(document.getElementById('student-dashboard')) document.getElementById('student-dashboard').style.display = 'none';
+            if(document.getElementById('search-area')) document.getElementById('search-area').style.display = 'none';
+            if(document.getElementById('student-task-list')) document.getElementById('student-task-list').innerHTML = '';
         }
         sidebar.classList.remove('active'); 
     });
@@ -440,37 +447,41 @@ async function loadAdminHistory() {
         let htmlContent = "";
         
         tasks.forEach(task => {
-            htmlContent += `<div style="background:#f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 15px; margin-bottom: 15px; position: relative;">`;
-            htmlContent += `<button class="admin-delete-task-btn" data-id="${task.id}" style="position: absolute; top: 15px; right: 15px; background: none; border: none; color: #e74c3c; cursor: pointer; font-size: 16px; font-weight: bold;">🗑️ 刪除</button>`;
-
             const modeBadge = task.mode ? `<span style="background: #bdc3c7; color: #fff; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-left: 10px;">${task.mode}</span>` : "";
-            
-            // 🌟 新增：完美相容新舊資料的學生名字顯示邏輯
             const studentsDisplay = task.students ? task.students.join('、') : (task.student || '未指定');
 
-            // 🌟 新增：在卡片最上方顯示這份作業是發給誰的
-            htmlContent += `<p style="margin: 0 0 10px 0; font-size: 13px; color: #7f8c8d; font-weight: bold;">🧑‍🎓 對象學生：<span style="color: #2c3e50;">${studentsDisplay}</span></p>`;
+            // 🌟 改變 1：將整張卡片改為 details 摺疊結構
+            htmlContent += `
+                <div style="margin-bottom: 15px;">
+                    <details style="background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 8px; cursor: pointer; transition: all 0.3s ease; overflow: hidden;">
+                        
+                        <summary style="padding: 15px; outline: none; user-select: none; border-bottom: 1px solid transparent; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px;">
+                            <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                                <span style="font-size: 15px; font-weight: bold; color: ${task.type === '講義' ? '#2c3e50' : '#e67e22'};">
+                                    ${task.type === '講義' ? '📄' : '📝'} ${task.title}
+                                </span>
+                                ${modeBadge}
+                            </div>
+                            <span style="font-size: 13px; color: #34495e; font-weight: bold; background: #eef2f5; padding: 4px 10px; border-radius: 20px;">
+                                🧑‍🎓 ${studentsDisplay}
+                            </span>
+                        </summary>
+                        
+                        <div style="padding: 0 15px 15px 15px; border-top: 1px dashed #ccc; cursor: auto;">
+                            
+                            <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+                                <button class="admin-delete-task-btn" data-id="${task.id}" style="background: #fdf2e9; border: 1px solid #fadbd8; color: #e74c3c; cursor: pointer; font-size: 12px; font-weight: bold; padding: 5px 10px; border-radius: 6px;">🗑️ 刪除此筆紀錄</button>
+                            </div>
+            `;
 
             if (task.type === "講義") {
                 htmlContent += `
-                    <div style="padding-right: 50px; margin-bottom: 10px;">
-    <h4 style="margin: 0 0 8px 0; color:#e67e22; line-height: 1.4; word-break: break-word;">📝 ${task.title}</h4>
-    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-        ${modeBadge}
-    </div>
-</div>
                     <p style="font-size: 10px; color: #bdc3c7; margin-bottom: 5px;">雲端 ID: ${task.cloudinaryId || '無'}</p>
-                    <a href="${task.fileUrl}" target="_blank" class="primary-btn" style="display:inline-block; text-decoration:none; background-color:#3498db; padding: 8px 15px; width:auto;">查看已發布講義</a>
+                    <a href="${task.fileUrl}" target="_blank" class="primary-btn" style="display:inline-block; text-decoration:none; background-color:#3498db; padding: 8px 15px; width:auto;">🔍 查看已發布講義</a>
                 `;
-} else if (task.type === "練習題") {
+            } else if (task.type === "練習題") {
                 const cloudIdsDisplay = task.cloudinaryIds ? task.cloudinaryIds.join(', ') : (task.cloudinaryId || '無');
                 htmlContent += `
-                    <div style="padding-right: 50px; margin-bottom: 10px;">
-    <h4 style="margin: 0 0 8px 0; color:#e67e22; line-height: 1.4; word-break: break-word;">📝 ${task.title}</h4>
-    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-        ${modeBadge}
-    </div>
-</div>
                     <p style="font-size: 10px; color: #bdc3c7; margin-bottom: 5px; word-break: break-all;">雲端 IDs: ${cloudIdsDisplay}</p>
                     <div style="margin-bottom: 10px;">
                         <span style="color: #e67e22; font-weight: bold;">🔍 原題目圖片：</span>
@@ -493,7 +504,6 @@ async function loadAdminHistory() {
                         </div>
                     `;
 
-                    // 注意！防呆：判斷舊資料字串或新資料陣列長度
                     const hasFeedback = task.teacherFeedbackUrls?.length > 0 || !!task.teacherFeedbackUrl;
 
                     if (hasFeedback) {
@@ -524,9 +534,9 @@ async function loadAdminHistory() {
                 } else {
                     htmlContent += `<p style="color: #e74c3c; font-weight: bold; background: #fdf2e9; padding: 10px; border-radius: 4px; border-left: 4px solid #e74c3c;">⏳ 學生尚未繳交</p>`;
                 }
-                htmlContent += `</div>`;
+                htmlContent += `</div>`; // 結束練習題狀態區塊
             }
-            htmlContent += `</div>`;
+            htmlContent += `</div></details></div>`; // 結束主要內容區與 details 標籤
         });
         
         adminHistoryList.innerHTML = htmlContent;
@@ -541,9 +551,65 @@ async function loadAdminHistory() {
 // 7. 學生端專屬功能
 // ==========================================
 
+// 🌟 7-0. 載入學生待辦儀表板
+async function loadStudentDashboard() {
+    const dashboardContent = document.getElementById('student-dashboard-content');
+    if (!dashboardContent) return;
+
+    dashboardContent.innerHTML = "<p style='color: #7f8c8d; font-size: 13px; margin: 0;'>🔄 正在掃描你的未完成作業...</p>";
+
+    try {
+        const q = query(collection(db, "tasks"), 
+            where("students", "array-contains", currentLoggedInStudent),
+            where("type", "==", "練習題"), 
+            where("status", "==", "未完成")
+        );
+        
+        const snapshot = await getDocs(q);
+        
+        if (snapshot.empty) {
+            dashboardContent.innerHTML = "<p style='color: #27ae60; font-weight: bold; margin: 0;'>🎉 太棒了！你目前沒有任何積欠的作業！</p>";
+            return;
+        }
+
+        // 🌟 1. 先把所有抓到的作業裝進一個陣列裡
+        let pendingTasks = [];
+        snapshot.forEach(doc => {
+            pendingTasks.push(doc.data());
+        });
+
+        // 🌟 2. 針對發布時間 (timestamp) 進行降冪排序 (越新的在越上面)
+        pendingTasks.sort((a, b) => {
+            // 如果剛發布還沒有時間戳記，預設給 0 防呆
+            const timeA = a.timestamp ? a.timestamp.toMillis() : 0;
+            const timeB = b.timestamp ? b.timestamp.toMillis() : 0;
+            return timeB - timeA; // B 減 A 代表由大到小 (新到舊)
+        });
+
+        // 🌟 3. 將排好序的陣列轉換為 HTML 印出
+        let html = '<ul style="margin: 10px 0 0 0; padding-left: 20px; color: #c0392b; font-size: 14px; line-height: 1.6;">';
+        pendingTasks.forEach(task => {
+            html += `<li><strong>【${task.subject}】</strong> ${task.title}</li>`;
+        });
+        html += '</ul>';
+        
+        dashboardContent.innerHTML = html;
+    } catch (error) {
+        console.error("讀取學生儀表板失敗：", error);
+        dashboardContent.innerHTML = "<p style='color: #e74c3c; margin: 0; font-size: 13px;'>讀取失敗，請檢查網路連線。</p>";
+    }
+}
+
 // 7-1. 點擊科目
 document.querySelectorAll('.subject-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
+        // 🌟 新增：清除所有科目按鈕的高光，並點亮當下點擊的這顆
+        document.querySelectorAll('.subject-btn').forEach(b => b.classList.remove('selected'));
+        e.target.classList.add('selected');
+        
+        // 🌟 新增：因為切換了科目，要把「模式(進度/複習)」的高光清空，要求學生重選
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('selected'));
+
         currentSubject = e.target.getAttribute('data-subject');
         selectedSubjectLabel.innerText = `【${currentSubject}】`;
         modeArea.style.display = 'block';
@@ -557,6 +623,9 @@ document.querySelectorAll('.subject-btn').forEach(btn => {
 // 7-2. 點擊模式抓取資料
 document.querySelectorAll('.mode-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('selected'));
+        e.target.classList.add('selected');
+
         const currentMode = e.target.getAttribute('data-mode');
         
         if (!studentTaskList) return;
@@ -574,7 +643,8 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
             studentTaskList.innerHTML = ""; 
 
             if (querySnapshot.empty) {
-                studentTaskList.innerHTML = "<p style='text-align:center; color:#7f8c8d;'>目前沒有未完成的作業喔！🎉</p>";
+                const emptyMessage = currentType === "講義" ? "目前尚未有講義喔！📚" : "目前沒有未完成的作業喔！🎉";
+                studentTaskList.innerHTML = `<p style='text-align:center; color:#7f8c8d;'>${emptyMessage}</p>`;
                 return;
             }
 
@@ -583,56 +653,58 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
                 const taskId = documentSnapshot.id; 
                 const modeBadge = task.mode ? `<span style="background: #95a5a6; color: white; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">${task.mode}</span>` : '';
 
+// 🌟 改為搜尋引擎可以辨識的 class，並取消預設 padding 讓細節掌控
                 const taskCard = document.createElement('div');
-                taskCard.className = 'card';
+                taskCard.className = 'card task-item-card';
                 taskCard.style.marginTop = '15px';
                 taskCard.style.border = '1px solid #e0e0e0';
+                taskCard.style.padding = '0'; 
+                taskCard.style.overflow = 'hidden';
 
                 if (task.type === "講義") {
                     const downloadFileName = task.originalFileName || `${task.title}.pdf`;
                     taskCard.innerHTML = `
-                        <h3 style="margin-top:0; color:#2c3e50; word-break: break-word;">📄 ${task.title}</h3>
-                        <div style="display: flex; gap: 10px; margin-top: 15px;">
-                            <a href="${task.fileUrl}" target="_blank" class="primary-btn" style="flex: 1; box-sizing: border-box; text-align:center; text-decoration:none; background-color:#3498db; padding: 10px;">🔍 線上觀看</a>
-                            <button class="primary-btn student-download-pdf-btn" data-url="${task.fileUrl}" data-filename="${downloadFileName}" style="flex: 1; background-color:#27ae60; padding: 10px;">⬇️ 儲存檔案</button>
-                        </div>
-                    `;
-                }
-else if (task.type === "練習題") {
-                    const isCompleted = task.status === "已完成";
-                    const hasFeedback = task.teacherFeedbackUrls?.length > 0 || !!task.teacherFeedbackUrl; 
-                    const detailsOpenAttr = isCompleted ? "" : "open"; 
-
-                    let innerHTML = `
-                        <div style="padding-right: 50px; margin-bottom: 10px;">
-    <h3 style="margin: 0 0 8px 0; color:#2c3e50; line-height: 1.4; word-break: break-word;">📝 ${task.title}</h3>
-    <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-        ${modeBadge}
-    </div>
-</div>
-                        ${task.hint ? `<p style="background:#fff3cd; padding:10px; border-radius:8px; color:#856404;">💡 老師叮嚀：${task.hint}</p>` : ''}
-                        
-                        <details ${detailsOpenAttr} style="cursor: pointer; margin-bottom: 15px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0;">
-                            <summary style="font-weight: bold; color: #3498db; outline: none; user-select: none;">
-                                🖼️ 點擊展開/收合題目圖片
+                        <details style="background: #fff; cursor: pointer; transition: all 0.3s ease;">
+                            <summary class="task-summary" style="padding: 15px; font-size: 16px; font-weight: bold; color: #2c3e50; outline: none; user-select: none; border-bottom: 1px solid transparent;">
+                                📄 ${task.title}
                             </summary>
-                            <div style="margin-top: 10px;">
-                                ${generateGalleryHTML(task.fileUrls || task.fileUrl, '#e67e22')}
+                            <div style="padding: 0 15px 15px 15px; border-top: 1px dashed #eee; cursor: auto; background: #fafbfc;">
+                                <div style="display: flex; gap: 10px; margin-top: 5px;">
+                                    <a href="${task.fileUrl}" target="_blank" class="primary-btn" style="flex: 1; box-sizing: border-box; text-align:center; text-decoration:none; background-color:#3498db; padding: 10px;">🔍 線上觀看</a>
+                                    <button class="primary-btn student-download-pdf-btn" data-url="${task.fileUrl}" data-filename="${downloadFileName}" style="flex: 1; background-color:#27ae60; padding: 10px;">⬇️ 儲存檔案</button>
+                                </div>
                             </div>
                         </details>
+                    `;
+                } else if (task.type === "練習題") {
+                    const isCompleted = task.status === "已完成";
+                    const hasFeedback = task.teacherFeedbackUrls?.length > 0 || !!task.teacherFeedbackUrl; 
+                    
 
-                        <div style="background:#f8f9fa; padding:15px; border-radius:8px;">
+                    let innerHTML = `
+                        <details style="background: #fff; cursor: pointer; transition: all 0.3s ease;">
+                            <summary class="task-summary" style="padding: 15px; font-size: 16px; font-weight: bold; color: #2c3e50; outline: none; user-select: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-bottom: 1px solid transparent;">
+                                📝 ${task.title} ${modeBadge}
+                            </summary>
+                            <div style="padding: 0 15px 15px 15px; border-top: 1px dashed #eee; cursor: auto; background: #fafbfc;">
+                                ${task.hint ? `<p style="background:#fff3cd; padding:10px; border-radius:8px; color:#856404; margin-top:0;">💡 老師叮嚀：${task.hint}</p>` : ''}
+                                
+                                <details style="cursor: pointer; margin-bottom: 15px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0;">
+                                    <summary style="font-weight: bold; color: #3498db; outline: none; user-select: none;">
+                                        🖼️ 點擊展開/收合題目圖片
+                                    </summary>
+                                    <div style="margin-top: 10px;">
+                                        ${generateGalleryHTML(task.fileUrls || task.fileUrl, '#e67e22')}
+                                    </div>
+                                </details>
+                                <div style="background:#f8f9fa; padding:15px; border-radius:8px;">
                     `;
 
                     if (isCompleted) {
                         innerHTML += `
                             <details style="cursor: pointer; margin-bottom: 15px;">
-                                <summary style="color: #27ae60; font-weight: bold; outline: none; user-select: none;">
-                                    ✅ 已繳交作業 (點擊展開查看解答)
-                                </summary>
-                                <div style="margin-top: 12px;">
-                                    ${generateGalleryHTML(task.studentReplyUrls || task.studentReplyUrl, '#27ae60')}
-                                </div>
+                                <summary style="color: #27ae60; font-weight: bold; outline: none; user-select: none;">✅ 已繳交作業 (點擊展開查看解答)</summary>
+                                <div style="margin-top: 12px;">${generateGalleryHTML(task.studentReplyUrls || task.studentReplyUrl, '#27ae60')}</div>
                             </details>
                         `;
 
@@ -640,35 +712,30 @@ else if (task.type === "練習題") {
                             innerHTML += `
                                 <div style="background: #f4ecf7; border-left: 4px solid #8e44ad; padding: 10px; border-radius: 4px;">
                                     <details open style="cursor: pointer;">
-                                        <summary style="color: #8e44ad; font-weight: bold; outline: none; user-select: none;">
-                                            👩‍🏫 老師的批改回饋 (點擊收合)
-                                        </summary>
-                                        <div style="margin-top: 12px;">
-                                            ${generateGalleryHTML(task.teacherFeedbackUrls || task.teacherFeedbackUrl, '#8e44ad')}
-                                        </div>
+                                        <summary style="color: #8e44ad; font-weight: bold; outline: none; user-select: none;">👩‍🏫 老師的批改回饋 (點擊收合)</summary>
+                                        <div style="margin-top: 12px;">${generateGalleryHTML(task.teacherFeedbackUrls || task.teacherFeedbackUrl, '#8e44ad')}</div>
                                     </details>
                                 </div>
                             `;
                         } else {
-                            innerHTML += `
-                                <button class="student-retract-btn" data-id="${taskId}" style="background: #ecf0f1; border: 1px solid #bdc3c7; color: #7f8c8d; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s;">
-                                    🔄 傳錯了？點此收回作業
-                                </button>
-                            `;
+                            innerHTML += `<button class="student-retract-btn" data-id="${taskId}" style="background: #ecf0f1; border: 1px solid #bdc3c7; color: #7f8c8d; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s;">🔄 傳錯了？點此收回作業</button>`;
                         }
                     } else {
-                        // 未繳交狀態
                         innerHTML += `
                             <h4 style="margin-top:0;">上傳你的解答：</h4>
                             <input type="file" id="reply-file-${taskId}" accept="application/pdf, .pdf, image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="margin-bottom: 10px; width: 100%;">
                             <button class="primary-btn submit-reply-btn" data-id="${taskId}" style="background-color:#27ae60;">繳交作業</button>
                         `;
                     }
-                    innerHTML += `</div>`;
+                    innerHTML += `</div></div></details>`;
                     taskCard.innerHTML = innerHTML;
                 }
                 studentTaskList.appendChild(taskCard);
             });
+
+            if(document.getElementById('search-area')) {
+                document.getElementById('search-area').style.display = 'block';
+            }
 
             // 7-3. 綁定學生繳交作業按鈕事件
             document.querySelectorAll('.submit-reply-btn').forEach(btn => {
@@ -876,6 +943,10 @@ if (simulateStudentBtn && exitSimulationBtn) {
         document.getElementById('subject-area').style.display = 'block'; // 顯示科目選擇
         document.getElementById('mode-area').style.display = 'none';
         document.getElementById('student-task-list').innerHTML = '';
+        
+        // 🌟 補上這兩行：在進入模擬模式時，把儀表板顯示出來並啟動掃描！
+        document.getElementById('student-dashboard').style.display = 'block';
+        if(typeof loadStudentDashboard === "function") loadStudentDashboard();
     });
 
     // 結束模擬，退回老師模式
@@ -891,5 +962,28 @@ if (simulateStudentBtn && exitSimulationBtn) {
         
         // 3. 重新載入老師原先的歷史紀錄畫面
         loadAdminHistory();
+    });
+}
+
+// ==========================================
+// 10. 學生端：即時標題搜尋引擎
+// ==========================================
+const taskSearchInput = document.getElementById('task-search-input');
+if(taskSearchInput) {
+    taskSearchInput.addEventListener('input', (e) => {
+        const keyword = e.target.value.toLowerCase();
+        const cards = document.querySelectorAll('#student-task-list .task-item-card');
+        
+        cards.forEach(card => {
+            const summaryElement = card.querySelector('.task-summary');
+            if (summaryElement) {
+                const titleText = summaryElement.innerText.toLowerCase();
+                if (titleText.includes(keyword)) {
+                    card.style.display = 'block';
+                } else {
+                    card.style.display = 'none';
+                }
+            }
+        });
     });
 }
