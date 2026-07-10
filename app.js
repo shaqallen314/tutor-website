@@ -844,3 +844,52 @@ if (e.target.classList.contains('admin-submit-feedback-btn')) {
         }
     }
 });
+
+// ==========================================
+// 9. 開發者外掛：模擬學生視角切換
+// ==========================================
+const simulateStudentBtn = document.getElementById('simulate-student-btn');
+const exitSimulationBtn = document.getElementById('exit-simulation-btn');
+
+if (simulateStudentBtn && exitSimulationBtn) {
+    // 進入模擬模式
+    simulateStudentBtn.addEventListener('click', () => {
+        if (!adminSelectedStudent) {
+            alert("請先選擇一位學生！");
+            return;
+        }
+        
+        // 1. 暫時將全域狀態切換為學生
+        isAdmin = false;
+        currentLoggedInStudent = adminSelectedStudent;
+        
+        // 2. 切換 UI 面板
+        document.getElementById('admin-panel').style.display = 'none';
+        document.getElementById('student-panel').style.display = 'block';
+        exitSimulationBtn.style.display = 'block'; // 亮出返回按鈕
+        
+        // 3. 更新學生畫面文字
+        document.getElementById('section-title').innerText = `👀 模擬視角：${currentLoggedInStudent} 的主頁`;
+        document.getElementById('section-desc').innerText = "目前處於模擬模式，你可以像學生一樣查看、操作任何功能。";
+        
+        // 4. 重置畫面準備
+        document.getElementById('subject-area').style.display = 'block'; // 顯示科目選擇
+        document.getElementById('mode-area').style.display = 'none';
+        document.getElementById('student-task-list').innerHTML = '';
+    });
+
+    // 結束模擬，退回老師模式
+    exitSimulationBtn.addEventListener('click', () => {
+        // 1. 恢復老師身分狀態
+        isAdmin = true;
+        currentLoggedInStudent = "";
+        
+        // 2. 切換 UI 面板
+        document.getElementById('student-panel').style.display = 'none';
+        document.getElementById('admin-panel').style.display = 'block';
+        exitSimulationBtn.style.display = 'none'; // 隱藏返回按鈕
+        
+        // 3. 重新載入老師原先的歷史紀錄畫面
+        loadAdminHistory();
+    });
+}
