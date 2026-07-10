@@ -782,21 +782,28 @@ if (e.target.classList.contains('admin-submit-feedback-btn')) {
     }
 
     // 【學生】收回作業
+    // 【學生】收回作業
     if (e.target.classList.contains('student-retract-btn')) {
-        if (!confirm("確定要收回作業嗎？收回後需重新上傳照片。")) return;
+        if (!confirm("確定要收回作業嗎？收回後需重新上傳檔案。")) return;
         const taskId = e.target.getAttribute('data-id');
         try {
             e.target.innerText = "收回中...";
+            
+            // 🌟 升級修正：同時清空舊版的單一字串與新版的陣列欄位
             await updateDoc(doc(db, "tasks", taskId), {
                 status: "未完成",
-                studentReplyUrl: "",
+                studentReplyUrls: [], // 清空多圖/PDF 陣列
+                studentReplyUrl: "",  // 相容清空舊資料
                 replyTimestamp: null
             });
+            
             alert("🔄 作業已收回！");
-            document.getElementById('student-task-list').innerHTML = "<p style='text-align:center; color:#27ae60;'>已成功收回，請重新點擊上方模式按鈕載入題目。</p>";
+            // 提示學生重新載入畫面
+            document.getElementById('student-task-list').innerHTML = "<p style='text-align:center; color:#27ae60;'>已成功收回，請重新點擊上方的「學校進度」或「學測複習」來重新載入題目。</p>";
         } catch (error) {
             console.error(error);
-            alert("收回失敗");
+            alert("收回失敗，請檢查網路連線。");
+            e.target.innerText = "🔄 傳錯了？點此收回作業";
         }
     }
     
