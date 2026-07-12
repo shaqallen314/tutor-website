@@ -875,20 +875,25 @@ if (e.target.classList.contains('admin-submit-feedback-btn')) {
 
     // 【老師】收回批改圖片
     if (e.target.classList.contains('admin-retract-feedback-btn')) {
-        if (!confirm("確定要收回這份批改嗎？")) return;
-        const taskId = e.target.getAttribute('data-id');
-        try {
-            e.target.innerText = "收回中...";
-            await updateDoc(doc(db, "tasks", taskId), {
-                teacherFeedbackUrl: ""
-            });
-            alert("🔄 批改已收回，現在可以重新上傳囉！");
-            loadAdminHistory(); 
-        } catch (error) {
-            console.error(error);
-            alert("收回失敗");
-        }
+    if (!confirm("確定要收回這份批改嗎？")) return;
+    const taskId = e.target.getAttribute('data-id');
+    try {
+        e.target.innerText = "收回中...";
+        
+        // 同時清空單一網址、多圖陣列與批改時間戳記
+        await updateDoc(doc(db, "tasks", taskId), {
+            teacherFeedbackUrl: "",
+            teacherFeedbackUrls: [], // 🌟 修正：清空多圖陣列，讓長度變回 0
+            feedbackTimestamp: null  // 🌟 修正：移除時間戳記，避免 Dashboard 誤判
+        });
+        
+        alert("🔄 批改已收回，現在可以重新上傳囉！");
+        loadAdminHistory(); 
+    } catch (error) {
+        console.error(error);
+        alert("收回失敗");
     }
+}
 
     // 【學生】收回作業
     // 【學生】收回作業
