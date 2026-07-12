@@ -556,44 +556,86 @@ async function loadStudentDashboard() {
     const dashboardContent = document.getElementById('student-dashboard-content');
     if (!dashboardContent) return;
 
-    dashboardContent.innerHTML = "<p style='color: #7f8c8d; font-size: 13px; margin: 0;'>🔄 正在掃描你的未完成作業...</p>";
+    dashboardContent.innerHTML = "<p style='color: #7f8c8d; font-size: 13px; margin: 0;'>🔄 正在掃描你的最新任務與老師回饋...</p>";
 
     try {
+        // 🌟 改動 1：移除 status == "未完成" 的限制，一次抓回該學生的所有練習題
         const q = query(collection(db, "tasks"), 
             where("students", "array-contains", currentLoggedInStudent),
-            where("type", "==", "練習題"), 
-            where("status", "==", "未完成")
+            where("type", "==", "練習題")
         );
         
         const snapshot = await getDocs(q);
         
         if (snapshot.empty) {
-            dashboardContent.innerHTML = "<p style='color: #27ae60; font-weight: bold; margin: 0;'>🎉 太棒了！你目前沒有任何積欠的作業！</p>";
+            dashboardContent.innerHTML = "<p style='color: #27ae60; font-weight: bold; margin: 0;'>🎉 目前沒有任何指派的任務喔！</p>";
             return;
         }
 
-        // 🌟 1. 先把所有抓到的作業裝進一個陣列裡
-        let pendingTasks = [];
+        let pendingTasks = []; // 放未完成的
+        let gradedTasks = [];  // 放已批改的
+
+        // 🌟 改動 2：將抓回來的資料分門別類
         snapshot.forEach(doc => {
-            pendingTasks.push(doc.data());
+            const task = doc.data();
+            if (task.status === "未完成") {
+                pendingTasks.push(task);
+            } 
+            // 如果狀態是已完成，且老師有上傳批改圖片，才放進 gradedTasks
+            else if (task.status === "已完成" && (task.teacherFeedbackUrls?.length > 0 || task.teacherFeedbackUrl)) {
+                gradedTasks.push(task);
+            }
         });
 
-        // 🌟 2. 針對發布時間 (timestamp) 進行降冪排序 (越新的在越上面)
+        // 🌟 改動 3：分別進行排序
+        // 未完成作業：依「發布時間」降冪排序 (新的在上面)
         pendingTasks.sort((a, b) => {
-            // 如果剛發布還沒有時間戳記，預設給 0 防呆
             const timeA = a.timestamp ? a.timestamp.toMillis() : 0;
             const timeB = b.timestamp ? b.timestamp.toMillis() : 0;
-            return timeB - timeA; // B 減 A 代表由大到小 (新到舊)
+            return timeB - timeA; 
         });
 
-        // 🌟 3. 將排好序的陣列轉換為 HTML 印出
-        let html = '<ul style="margin: 10px 0 0 0; padding-left: 20px; color: #c0392b; font-size: 14px; line-height: 1.6;">';
-        pendingTasks.forEach(task => {
-            html += `<li><strong>【${task.subject}】</strong> ${task.title}</li>`;
+        // 已批改作業：依「批改時間」降冪排序 (新的在上面)
+        // 防呆：如果是舊資料沒有 feedbackTimestamp，就退回用繳交時間或發布時間來排
+        gradedTasks.sort((a, b) => {
+            const timeA = a.feedbackTimestamp ? a.feedbackTimestamp.toMillis() : (a.replyTimestamp ? a.replyTimestamp.toMillis() : 0);
+            const timeB = b.feedbackTimestamp ? b.feedbackTimestamp.toMillis() : (b.replyTimestamp ? b.replyTimestamp.toMillis() : 0);
+            return timeB - timeA;
         });
-        html += '</ul>';
-        
+
+        // 🌟 改動 4：將分類好的資料轉換為 HTML 輸出
+        let html = "";
+
+        // 區塊 A：未完成的作業 (紅字)
+        if (pendingTasks.length > 0) {
+            html += `<div style="margin-bottom: ${gradedTasks.length > 0 ? '15px' : '0'};">`;
+            html += `<h4 style="margin: 0 0 8px 0; color: #c0392b; font-size: 14px;">🚨 尚未繳交：</h4>`;
+            html += `<ul style="margin: 0; padding-left: 20px; color: #c0392b; font-size: 14px; line-height: 1.6;">`;
+            pendingTasks.forEach(task => {
+                html += `<li><strong>【${task.subject}】</strong> ${task.title}</li>`;
+            });
+            html += `</ul></div>`;
+        } else {
+            // 如果沒有待辦，給予鼓勵的文字
+            html += `<div style="margin-bottom: ${gradedTasks.length > 0 ? '15px' : '0'};">`;
+            html += `<p style="color: #27ae60; font-weight: bold; margin: 0; font-size: 14px;">🎉 太棒了！你目前沒有任何積欠的作業！</p>`;
+            html += `</div>`;
+        }
+
+        // 區塊 B：已經批改的作業 (綠字)
+        if (gradedTasks.length > 0) {
+            // 如果上面有待辦區塊，這裡加一條虛線分隔一下比較好看
+            html += `<div style="border-top: 1px dashed #ccc; padding-top: 12px;">`;
+            html += `<h4 style="margin: 0 0 8px 0; color: #27ae60; font-size: 14px;">✅ 最新批改出爐 (點選左側選單查看)：</h4>`;
+            html += `<ul style="margin: 0; padding-left: 20px; color: #27ae60; font-size: 14px; line-height: 1.6;">`;
+            gradedTasks.forEach(task => {
+                html += `<li><strong>【${task.subject}】</strong> ${task.title}</li>`;
+            });
+            html += `</ul></div>`;
+        }
+
         dashboardContent.innerHTML = html;
+
     } catch (error) {
         console.error("讀取學生儀表板失敗：", error);
         dashboardContent.innerHTML = "<p style='color: #e74c3c; margin: 0; font-size: 13px;'>讀取失敗，請檢查網路連線。</p>";
@@ -820,7 +862,7 @@ if (e.target.classList.contains('admin-submit-feedback-btn')) {
             const uploadResults = await uploadMultipleFilesToCloudinary(files);
             const feedbackUrls = uploadResults.map(res => res.url);
             
-            await updateDoc(doc(db, "tasks", taskId), { teacherFeedbackUrls: feedbackUrls });
+            await updateDoc(doc(db, "tasks", taskId), { teacherFeedbackUrls: feedbackUrls, feedbackTimestamp: serverTimestamp() });
             alert("👩‍🏫 批改送出成功！");
             loadAdminHistory(); 
         } catch (error) {
