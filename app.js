@@ -3,7 +3,7 @@
 // ==========================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, serverTimestamp, getDocs, query, where, updateDoc, doc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, serverTimestamp, getDocs, query, where, updateDoc, doc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // ==========================================
 // 2. 系統設定參數 (Firebase & Cloudinary)
@@ -279,8 +279,20 @@ async function uploadMultipleFilesToCloudinary(files) {
     return await Promise.all(uploadPromises); // 回傳的是一個包含所有物件的陣列
 }
 
-// 【升級版武器 B】專門用來生成「水平卡片展廳」的小工具，自動辨識圖片與 PDF
-function generateGalleryHTML(urlData, badgeColor = "#3498db") {
+// ➕ 新增：用於將逗號分隔的自訂名稱字串解析為與檔案數量一致的陣列（不足時自動補空字串）
+function parsePdfNames(inputVal, fileCount) {
+    let names = [];
+    if (inputVal) {
+        names = inputVal.split(',').map(s => s.trim());
+    }
+    while (names.length < fileCount) {
+        names.push("");
+    }
+    return names;
+}
+
+// 🔴 升級版武器 B：支援 PDF 自訂名稱顯示的小工具 (新增第三個參數 customPdfNames)
+function generateGalleryHTML(urlData, badgeColor = "#3498db", customPdfNames = []) {
     let urls = [];
     if (Array.isArray(urlData)) {
         urls = urlData;
@@ -294,6 +306,9 @@ function generateGalleryHTML(urlData, badgeColor = "#3498db") {
     urls.forEach((url, index) => {
         // 🌟 核心魔法：判斷網址是否為 PDF (忽略大小寫與網址參數)
         const isPdf = url.toLowerCase().split('?')[0].endsWith('.pdf');
+        
+        // 🔍 取得對應位置的自訂名稱 (如果沒有傳入或留空則為空字串)
+        const customName = (customPdfNames && customPdfNames[index]) ? customPdfNames[index] : "";
 
         html += `
             <div class="image-card" style="display: flex; flex-direction: column; justify-content: center; align-items: center; background: #fdfdfd;">
@@ -301,7 +316,8 @@ function generateGalleryHTML(urlData, badgeColor = "#3498db") {
                 ${isPdf 
                     ? `<a href="${url}" target="_blank" style="text-decoration: none; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; min-height: 120px; color: ${badgeColor};">
                            <span style="font-size: 40px; margin-bottom: 8px;">📄</span>
-                           <span style="font-weight: bold; font-size: 14px;">點擊查看 PDF</span>
+                           ${customName ? `<span style="font-weight: bold; font-size: 14px; margin-bottom: 4px; color: #333; text-align: center; padding: 0 5px; word-break: break-all;">${customName}</span>` : ""}
+                           <span style="font-weight: normal; font-size: 12px; color: ${badgeColor};">點擊查看 PDF</span>
                        </a>`
                     : `<img src="${url}" onclick="window.open(this.src)" style="cursor: pointer; object-fit: cover; width: 100%; height: 100%;">`
                 }
@@ -362,9 +378,11 @@ publishImgBtn.addEventListener('click', async () => {
     const title = exerciseTitleInput.value;
     const files = exerciseFileInput.files; 
     const hint = exerciseHintInput.value;
+    
+    // ➕ 抓取自訂 PDF 名稱欄位
+    const pdfNameInput = document.getElementById('exercise-pdf-name');
+    const pdfNamesText = pdfNameInput ? pdfNameInput.value : "";
 
-    // 💡 防呆機制：確保有輸入標題、有選圖片、且「至少勾選了一位學生」
-    // selectedStudents 是你原本在前端用來收集勾選名字的陣列 (例如: ["紫軒", "昵貽"])
     if (!title || files.length === 0 || selectedStudents.length === 0) {
         alert("請完整輸入題目名稱、選擇學生並至少上傳一張圖片！");
         return;
@@ -374,15 +392,15 @@ publishImgBtn.addEventListener('click', async () => {
         publishImgBtn.innerText = "上傳中...";
         publishImgBtn.disabled = true;
 
-        // 呼叫我們先前寫好的多圖上傳函式
         const uploadResults = await uploadMultipleFilesToCloudinary(files);
         const fileUrls = uploadResults.map(res => res.url);
         const cloudinaryIds = uploadResults.map(res => res.publicId);
+        
+        // ➕ 解析 PDF 名稱陣列
+        const exercisePdfNames = parsePdfNames(pdfNamesText, files.length);
 
-        // 🌟 2.5版核心改動：不再需要用迴圈重複建立多份文件！
-        // 我們直接呼叫一次 addDoc，建立「單一筆」文件
         await addDoc(collection(db, "tasks"), {
-            students: selectedStudents,     // 🌟 直接把前端的學生名字陣列存進去！
+            students: selectedStudents,     
             subject: currentSubject,
             type: "練習題",
             mode: adminModeSelect.value,
@@ -390,27 +408,28 @@ publishImgBtn.addEventListener('click', async () => {
             hint: hint,
             fileUrls: fileUrls,             
             cloudinaryIds: cloudinaryIds,   
+            exercisePdfNames: exercisePdfNames, // ➕ 儲存題目 PDF 名稱
             status: "未完成",
-            studentReplyUrls: [],           // 預留空陣列給學生多圖繳交
-            teacherFeedbackUrls: [],        // 預留空陣列給老師多圖批改
+            studentReplyUrls: [],           
+            studentReplyPdfNames: [],           // ➕ 初始化解答名稱欄位
+            teacherFeedbackUrls: [],        
+            teacherFeedbackPdfNames: [],        // ➕ 初始化批改名稱欄位
             timestamp: serverTimestamp()
         });
 
-        alert(`🎉 題目已成功發布！勾選的學生們將能同時共享此資料。`);
+        alert(`🎉 題目已成功發布！`);
         
-        // 清空輸入欄位
         exerciseTitleInput.value = "";
         exerciseFileInput.value = "";
         exerciseHintInput.value = "";
+        if (pdfNameInput) pdfNameInput.value = ""; // ➕ 清空欄位
         
-        // 💡 記得在這裡加上你原本用來把前端 Checkbox 勾選狀態清空、以及重設 selectedStudents = [] 的程式碼
-        
-        loadAdminHistory(); // 重新整理老師後台歷史紀錄
+        loadAdminHistory(); 
     } catch (error) {
         console.error(error);
         alert("發布失敗，請檢查控制台。");
     } finally {
-        publishImgBtn.innerText = "發布題目 (圖片)";
+        publishImgBtn.innerText = "發布題目";
         publishImgBtn.disabled = false;
     }
 });
@@ -485,7 +504,8 @@ async function loadAdminHistory() {
                     <p style="font-size: 10px; color: #bdc3c7; margin-bottom: 5px; word-break: break-all;">雲端 IDs: ${cloudIdsDisplay}</p>
                     <div style="margin-bottom: 10px;">
                         <span style="color: #e67e22; font-weight: bold;">🔍 原題目圖片：</span>
-                        ${generateGalleryHTML(task.fileUrls || task.fileUrl, '#e67e22')}
+                        
+${generateGalleryHTML(task.fileUrls || task.fileUrl, '#e67e22', task.exercisePdfNames || [])}
                     </div>
                     <div style="margin-top: 15px;">
                 `;
@@ -498,7 +518,7 @@ async function loadAdminHistory() {
                                     ✅ 學生已繳交作業 (點擊展開)
                                 </summary>
                                 <div style="margin-top: 12px;">
-                                    ${generateGalleryHTML(task.studentReplyUrls || task.studentReplyUrl, '#27ae60')}
+                                    ${generateGalleryHTML(task.studentReplyUrls || task.studentReplyUrl, '#27ae60', task.studentReplyPdfNames || [])}
                                 </div>
                             </details>
                         </div>
@@ -506,31 +526,46 @@ async function loadAdminHistory() {
 
                     const hasFeedback = task.teacherFeedbackUrls?.length > 0 || !!task.teacherFeedbackUrl;
 
-                    if (hasFeedback) {
-                        htmlContent += `
-                            <div style="margin-top: 15px; background: #f4ecf7; border-left: 4px solid #8e44ad; padding: 10px; border-radius: 4px; position: relative;">
-                                <details style="cursor: pointer;">
-                                    <summary style="color: #8e44ad; font-weight: bold; outline: none; user-select: none;">
-                                        👩‍🏫 已回傳批改 (點擊展開)
-                                    </summary>
-                                    <div style="margin-top: 12px;">
-                                        ${generateGalleryHTML(task.teacherFeedbackUrls || task.teacherFeedbackUrl, '#8e44ad')}
-                                        <button class="admin-retract-feedback-btn" data-id="${task.id}" style="margin-top: 10px; background: #fff; border: 1px solid #8e44ad; color: #8e44ad; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; width: 100%;">
-                                            🔄 傳錯了？收回此批改
-                                        </button>
-                                    </div>
-                                </details>
-                            </div>
-                        `;
-                    } else {
-                        htmlContent += `
-                            <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px;">
-                                <label style="font-weight: bold; color: #8e44ad; display: block; margin-bottom: 8px;">👩‍🏫 上傳批改後的圖片 (可多選)：</label>
-                                <input type="file" id="feedback-file-${task.id}" accept="application/pdf, .pdf, image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="width: 100%; margin-bottom: 10px;">
-                                <button class="primary-btn admin-submit-feedback-btn" data-id="${task.id}" style="background-color: #8e44ad; padding: 8px 15px; width: auto;">送出多張批改</button>
-                            </div>
-                        `;
-                    }
+                     
+
+
+
+// 3. 老師已回傳批改 (帶入 task.teacherFeedbackPdfNames 且在詳情內新增補充上傳功能)：
+if (hasFeedback) {
+    htmlContent += `
+        <div style="margin-top: 15px; background: #f4ecf7; border-left: 4px solid #8e44ad; padding: 10px; border-radius: 4px; position: relative;">
+            <details style="cursor: pointer;">
+                <summary style="color: #8e44ad; font-weight: bold; outline: none; user-select: none;">
+                    👩‍🏫 已回傳批改 (點擊展開)
+                </summary>
+                <div style="margin-top: 12px;">
+                    ${generateGalleryHTML(task.teacherFeedbackUrls || task.teacherFeedbackUrl, '#8e44ad', task.teacherFeedbackPdfNames || [])}
+                    
+                    <div style="margin-top: 15px; border-top: 1px dashed #8e44ad; padding-top: 15px;">
+                        <label style="font-weight: bold; color: #8e44ad; display: block; margin-bottom: 8px; font-size: 13px;">➕ 補充上傳批改後的圖片/PDF (可多選)：</label>
+                        <input type="file" id="append-feedback-file-${task.id}" accept="application/pdf, .pdf, image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="width: 100%; margin-bottom: 10px; font-size: 12px;">
+                        <input type="text" id="append-feedback-pdf-name-${task.id}" placeholder="補充 PDF 顯示名稱 (選填，多個以逗號分隔)" style="width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-size: 12px;">
+                        <button class="primary-btn admin-append-feedback-btn" data-id="${task.id}" style="background-color: #8e44ad; padding: 6px 12px; width: auto; font-size: 13px;">送出補充批改</button>
+                    </div>
+
+                    <button class="admin-retract-feedback-btn" data-id="${task.id}" style="margin-top: 15px; background: #fff; border: 1px solid #8e44ad; color: #8e44ad; padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; width: 100%;">
+                        🔄 傳錯了？收回此批改
+                    </button>
+                </div>
+            </details>
+        </div>
+    `;
+} else {
+    // ➕ 如果還沒有任何批改，原始批改介面也加入 PDF 顯示名稱自訂欄位
+    htmlContent += `
+        <div style="margin-top: 15px; border-top: 1px dashed #ccc; padding-top: 15px;">
+            <label style="font-weight: bold; color: #8e44ad; display: block; margin-bottom: 8px;">👩‍🏫 上傳批改後的圖片/PDF (可多選)：</label>
+            <input type="file" id="feedback-file-${task.id}" accept="application/pdf, .pdf, image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="width: 100%; margin-bottom: 10px;">
+            <input type="text" id="feedback-pdf-name-${task.id}" placeholder="PDF 顯示名稱 (選填，多個以逗號分隔)" style="width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-size: 13px;">
+            <button class="primary-btn admin-submit-feedback-btn" data-id="${task.id}" style="background-color: #8e44ad; padding: 8px 15px; width: auto;">送出多張批改</button>
+        </div>
+    `;
+}
                 } else {
                     htmlContent += `<p style="color: #e74c3c; font-weight: bold; background: #fdf2e9; padding: 10px; border-radius: 4px; border-left: 4px solid #e74c3c;">⏳ 學生尚未繳交</p>`;
                 }
@@ -719,59 +754,73 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
                         </details>
                     `;
                 } else if (task.type === "練習題") {
-                    const isCompleted = task.status === "已完成";
-                    const hasFeedback = task.teacherFeedbackUrls?.length > 0 || !!task.teacherFeedbackUrl; 
-                    
+    const isCompleted = task.status === "已完成";
+    const hasFeedback = task.teacherFeedbackUrls?.length > 0 || !!task.teacherFeedbackUrl; 
 
-                    let innerHTML = `
-                        <details style="background: #fff; cursor: pointer; transition: all 0.3s ease;">
-                            <summary class="task-summary" style="padding: 15px; font-size: 16px; font-weight: bold; color: #2c3e50; outline: none; user-select: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-bottom: 1px solid transparent;">
-                                📝 ${task.title} ${modeBadge}
-                            </summary>
-                            <div style="padding: 0 15px 15px 15px; border-top: 1px dashed #eee; cursor: auto; background: #fafbfc;">
-                                ${task.hint ? `<p style="background:#fff3cd; padding:10px; border-radius:8px; color:#856404; margin-top:0;">💡 老師叮嚀：${task.hint}</p>` : ''}
-                                
-                                <details style="cursor: pointer; margin-bottom: 15px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0;">
-                                    <summary style="font-weight: bold; color: #3498db; outline: none; user-select: none;">
-                                        🖼️ 點擊展開/收合題目圖片
-                                    </summary>
-                                    <div style="margin-top: 10px;">
-                                        ${generateGalleryHTML(task.fileUrls || task.fileUrl, '#e67e22')}
-                                    </div>
-                                </details>
-                                <div style="background:#f8f9fa; padding:15px; border-radius:8px;">
-                    `;
+    let innerHTML = `
+        <details style="background: #fff; cursor: pointer; transition: all 0.3s ease;">
+            <summary class="task-summary" style="padding: 15px; font-size: 16px; font-weight: bold; color: #2c3e50; outline: none; user-select: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-bottom: 1px solid transparent;">
+                📝 ${task.title} ${modeBadge}
+            </summary>
+            <div style="padding: 0 15px 15px 15px; border-top: 1px dashed #eee; cursor: auto; background: #fafbfc;">
+                ${task.hint ? `<p style="background:#fff3cd; padding:10px; border-radius:8px; color:#856404; margin-top:0;">💡 老師叮嚀：${task.hint}</p>` : ''}
+                
+                <details style="cursor: pointer; margin-bottom: 15px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0;">
+                    <summary style="font-weight: bold; color: #3498db; outline: none; user-select: none;">
+                        🖼️ 點擊展開/收合題目圖片
+                    </summary>
+                    <div style="margin-top: 10px;">
+                        ${generateGalleryHTML(task.fileUrls || task.fileUrl, '#e67e22', task.exercisePdfNames || [])}
+                    </div>
+                </details>
+                <div style="background:#f8f9fa; padding:15px; border-radius:8px;">
+    `;
 
-                    if (isCompleted) {
-                        innerHTML += `
-                            <details style="cursor: pointer; margin-bottom: 15px;">
-                                <summary style="color: #27ae60; font-weight: bold; outline: none; user-select: none;">✅ 已繳交作業 (點擊展開查看解答)</summary>
-                                <div style="margin-top: 12px;">${generateGalleryHTML(task.studentReplyUrls || task.studentReplyUrl, '#27ae60')}</div>
-                            </details>
-                        `;
+    if (isCompleted) {
+        innerHTML += `
+            <details style="cursor: pointer; margin-bottom: 15px;">
+                <summary style="color: #27ae60; font-weight: bold; outline: none; user-select: none;">✅ 已繳交作業 (點擊展開查看解答)</summary>
+                <div style="margin-top: 12px;">
+                    ${generateGalleryHTML(task.studentReplyUrls || task.studentReplyUrl, '#27ae60', task.studentReplyPdfNames || [])}
+                </div>
+            </details>
+        `;
 
-                        if (hasFeedback) {
-                            innerHTML += `
-                                <div style="background: #f4ecf7; border-left: 4px solid #8e44ad; padding: 10px; border-radius: 4px;">
-                                    <details open style="cursor: pointer;">
-                                        <summary style="color: #8e44ad; font-weight: bold; outline: none; user-select: none;">👩‍🏫 老師的批改回饋 (點擊收合)</summary>
-                                        <div style="margin-top: 12px;">${generateGalleryHTML(task.teacherFeedbackUrls || task.teacherFeedbackUrl, '#8e44ad')}</div>
-                                    </details>
-                                </div>
-                            `;
-                        } else {
-                            innerHTML += `<button class="student-retract-btn" data-id="${taskId}" style="background: #ecf0f1; border: 1px solid #bdc3c7; color: #7f8c8d; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s;">🔄 傳錯了？點此收回作業</button>`;
-                        }
-                    } else {
-                        innerHTML += `
-                            <h4 style="margin-top:0;">上傳你的解答：</h4>
-                            <input type="file" id="reply-file-${taskId}" accept="application/pdf, .pdf, image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="margin-bottom: 10px; width: 100%;">
-                            <button class="primary-btn submit-reply-btn" data-id="${taskId}" style="background-color:#27ae60;">繳交作業</button>
-                        `;
-                    }
-                    innerHTML += `</div></div></details>`;
-                    taskCard.innerHTML = innerHTML;
-                }
+        if (hasFeedback) {
+            innerHTML += `
+                <div style="background: #f4ecf7; border-left: 4px solid #8e44ad; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+                    <details open style="cursor: pointer;">
+                        <summary style="color: #8e44ad; font-weight: bold; outline: none; user-select: none;">👩‍🏫 老師的批改回饋 (點擊收合)</summary>
+                        <div style="margin-top: 12px;">
+                            ${generateGalleryHTML(task.teacherFeedbackUrls || task.teacherFeedbackUrl, '#8e44ad', task.teacherFeedbackPdfNames || [])}
+                        </div>
+                    </details>
+                </div>
+            `;
+        } else {
+            innerHTML += `<button class="student-retract-btn" data-id="${taskId}" style="background: #ecf0f1; border: 1px solid #bdc3c7; color: #7f8c8d; padding: 8px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.3s; margin-bottom: 15px;">🔄 傳錯了？點此收回作業</button>`;
+        }
+
+        // ➕ 新增：學生端「補充上傳解答檔案」的介面
+        innerHTML += `
+            <div style="background: #eef9f5; border-left: 4px solid #27ae60; padding: 15px; border-radius: 8px; margin-top: 15px;">
+                <h4 style="margin-top: 0; color: #27ae60; font-size: 14px;">➕ 補充上傳更多解答：</h4>
+                <input type="file" id="append-reply-file-${taskId}" accept="application/pdf, .pdf, image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="margin-bottom: 10px; width: 100%;">
+                <input type="text" id="append-reply-pdf-name-${taskId}" placeholder="補充 PDF 顯示名稱 (選填，多個以逗號分隔)" style="width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-size: 13px;">
+                <button class="primary-btn student-append-reply-btn" data-id="${taskId}" style="background-color: #27ae60; padding: 8px 15px;">送出補充解答</button>
+            </div>
+        `;
+    } else {
+        innerHTML += `
+            <h4 style="margin-top:0;">上傳你的解答：</h4>
+            <input type="file" id="reply-file-${taskId}" accept="application/pdf, .pdf, image/jpeg, image/png, image/heic, image/heif, .heic, .heif" multiple style="margin-bottom: 10px; width: 100%;">
+            <input type="text" id="reply-pdf-name-${taskId}" placeholder="PDF 顯示名稱 (選填，多個以逗號分隔)" style="width: 100%; padding: 8px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-size: 13px;">
+            <button class="primary-btn submit-reply-btn" data-id="${taskId}" style="background-color:#27ae60;">繳交作業</button>
+        `;
+    }
+    innerHTML += `</div></div></details>`;
+    taskCard.innerHTML = innerHTML;
+}
                 studentTaskList.appendChild(taskCard);
             });
 
@@ -782,42 +831,41 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
             // 7-3. 綁定學生繳交作業按鈕事件
             document.querySelectorAll('.submit-reply-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
-                    const taskId = e.target.getAttribute('data-id');
-                    const fileInput = document.getElementById(`reply-file-${taskId}`);
-                    const files = fileInput.files;
-                    if (files.length === 0) { alert("請先選擇至少一張解答照片！"); return; }
+    const taskId = e.target.getAttribute('data-id');
+    const fileInput = document.getElementById(`reply-file-${taskId}`);
+    const nameInput = document.getElementById(`reply-pdf-name-${taskId}`); // ➕ 抓取自訂名稱欄位
+    const files = fileInput.files;
+    if (files.length === 0) { alert("請先選擇至少一張解答照片！"); return; }
 
-                    try {
-                        btn.innerText = "上傳多圖中...";
-                        btn.disabled = true;
+    try {
+        btn.innerText = "上傳多圖中...";
+        btn.disabled = true;
 
-                        const uploadResults = await uploadMultipleFilesToCloudinary(files);
-                        const replyUrls = uploadResults.map(res => res.url);
-                        
-                        await updateDoc(doc(db, "tasks", taskId), {
-                            status: "已完成",
-                            studentReplyUrls: replyUrls,
-                            replyTimestamp: serverTimestamp()
-                        });
+        const uploadResults = await uploadMultipleFilesToCloudinary(files);
+        const replyUrls = uploadResults.map(res => res.url);
+        
+        // ➕ 解析自訂名稱並存入資料庫
+        const replyPdfNames = parsePdfNames(nameInput ? nameInput.value : "", files.length);
 
-                        alert("🎉 作業繳交成功！");
-                        e.target.parentElement.innerHTML = `
-                            <details style="cursor: pointer;">
-                                <summary style="color: #27ae60; font-weight: bold; outline: none; user-select: none;">
-                                    ✅ 作業繳交成功！ (點擊展開查看)
-                                </summary>
-                                <div style="margin-top: 12px;">
-                                    ${generateGalleryHTML(replyUrls, '#27ae60')}
-                                </div>
-                            </details>
-                        `;
-                    } catch (error) {
-                        console.error(error);
-                        alert("繳交失敗，請檢查網路。");
-                        btn.innerText = "繳交作業";
-                        btn.disabled = false;
-                    }
-                });
+        await updateDoc(doc(db, "tasks", taskId), {
+            status: "已完成",
+            studentReplyUrls: replyUrls,
+            studentReplyPdfNames: replyPdfNames, // ➕ 儲存解答 PDF 自訂名稱
+            replyTimestamp: serverTimestamp()
+        });
+
+        alert("🎉 作業繳交成功！");
+        
+        // 成功後直接點擊模式按鈕，重新整理該頁面顯示新視圖
+        const selectedModeBtn = document.querySelector('.mode-btn.selected');
+        if (selectedModeBtn) selectedModeBtn.click();
+    } catch (error) {
+        console.error(error);
+        alert("繳交失敗，請檢查網路。");
+        btn.innerText = "繳交作業";
+        btn.disabled = false;
+    }
+});
             });
 
         } catch(error) {
@@ -850,28 +898,36 @@ document.body.addEventListener('click', async (e) => {
 
     // 【老師】上傳批改圖片
 if (e.target.classList.contains('admin-submit-feedback-btn')) {
-        const taskId = e.target.getAttribute('data-id');
-        const fileInput = document.getElementById(`feedback-file-${taskId}`);
-        const files = fileInput.files;
+    const taskId = e.target.getAttribute('data-id');
+    const fileInput = document.getElementById(`feedback-file-${taskId}`);
+    const nameInput = document.getElementById(`feedback-pdf-name-${taskId}`); // ➕ 抓取自訂名稱欄位
+    const files = fileInput.files;
+    
+    if (files.length === 0) { alert("請先選擇至少一張批改圖片！"); return; }
+    
+    try {
+        e.target.innerText = "上傳多圖中...";
+        e.target.disabled = true;
+        const uploadResults = await uploadMultipleFilesToCloudinary(files);
+        const feedbackUrls = uploadResults.map(res => res.url);
         
-        if (files.length === 0) { alert("請先選擇至少一張批改圖片！"); return; }
+        // ➕ 解析批改 PDF 名稱
+        const feedbackPdfNames = parsePdfNames(nameInput ? nameInput.value : "", files.length);
         
-        try {
-            e.target.innerText = "上傳多圖中...";
-            e.target.disabled = true;
-            const uploadResults = await uploadMultipleFilesToCloudinary(files);
-            const feedbackUrls = uploadResults.map(res => res.url);
-            
-            await updateDoc(doc(db, "tasks", taskId), { teacherFeedbackUrls: feedbackUrls, feedbackTimestamp: serverTimestamp() });
-            alert("👩‍🏫 批改送出成功！");
-            loadAdminHistory(); 
-        } catch (error) {
-            console.error(error);
-            alert("上傳失敗");
-            e.target.innerText = "送出批改";
-            e.target.disabled = false;
-        }
+        await updateDoc(doc(db, "tasks", taskId), { 
+            teacherFeedbackUrls: feedbackUrls,
+            teacherFeedbackPdfNames: feedbackPdfNames, // ➕ 儲存自訂名稱
+            feedbackTimestamp: serverTimestamp() 
+        });
+        alert("👩‍🏫 批改送出成功！");
+        loadAdminHistory(); 
+    } catch (error) {
+        console.error(error);
+        alert("上傳失敗");
+        e.target.innerText = "送出批改";
+        e.target.disabled = false;
     }
+}
 
     // 【老師】收回批改圖片
     if (e.target.classList.contains('admin-retract-feedback-btn')) {
@@ -879,14 +935,12 @@ if (e.target.classList.contains('admin-submit-feedback-btn')) {
     const taskId = e.target.getAttribute('data-id');
     try {
         e.target.innerText = "收回中...";
-        
-        // 同時清空單一網址、多圖陣列與批改時間戳記
         await updateDoc(doc(db, "tasks", taskId), {
             teacherFeedbackUrl: "",
-            teacherFeedbackUrls: [], // 🌟 修正：清空多圖陣列，讓長度變回 0
-            feedbackTimestamp: null  // 🌟 修正：移除時間戳記，避免 Dashboard 誤判
+            teacherFeedbackUrls: [], 
+            teacherFeedbackPdfNames: [], // ➕ 清空自訂名稱陣列
+            feedbackTimestamp: null  
         });
-        
         alert("🔄 批改已收回，現在可以重新上傳囉！");
         loadAdminHistory(); 
     } catch (error) {
@@ -896,30 +950,26 @@ if (e.target.classList.contains('admin-submit-feedback-btn')) {
 }
 
     // 【學生】收回作業
-    // 【學生】收回作業
     if (e.target.classList.contains('student-retract-btn')) {
-        if (!confirm("確定要收回作業嗎？收回後需重新上傳檔案。")) return;
-        const taskId = e.target.getAttribute('data-id');
-        try {
-            e.target.innerText = "收回中...";
-            
-            // 🌟 升級修正：同時清空舊版的單一字串與新版的陣列欄位
-            await updateDoc(doc(db, "tasks", taskId), {
-                status: "未完成",
-                studentReplyUrls: [], // 清空多圖/PDF 陣列
-                studentReplyUrl: "",  // 相容清空舊資料
-                replyTimestamp: null
-            });
-            
-            alert("🔄 作業已收回！");
-            // 提示學生重新載入畫面
-            document.getElementById('student-task-list').innerHTML = "<p style='text-align:center; color:#27ae60;'>已成功收回，請重新點擊上方的「學校進度」或「學測複習」來重新載入題目。</p>";
-        } catch (error) {
-            console.error(error);
-            alert("收回失敗，請檢查網路連線。");
-            e.target.innerText = "🔄 傳錯了？點此收回作業";
-        }
+    if (!confirm("確定要收回作業嗎？收回後需重新上傳檔案。")) return;
+    const taskId = e.target.getAttribute('data-id');
+    try {
+        e.target.innerText = "收回中...";
+        await updateDoc(doc(db, "tasks", taskId), {
+            status: "未完成",
+            studentReplyUrls: [], 
+            studentReplyPdfNames: [], // ➕ 清空自訂名稱陣列
+            studentReplyUrl: "",  
+            replyTimestamp: null
+        });
+        alert("🔄 作業已收回！");
+        document.getElementById('student-task-list').innerHTML = "<p style='text-align:center; color:#27ae60;'>已成功收回，請重新點擊上方的「學校進度」或「學測複習」來重新載入題目。</p>";
+    } catch (error) {
+        console.error(error);
+        alert("收回失敗，請檢查網路連線。");
+        e.target.innerText = "🔄 傳錯了？點此收回作業";
     }
+}
     
     // 【學生】強制下載 PDF
     if (e.target.classList.contains('student-download-pdf-btn')) {
@@ -957,6 +1007,99 @@ if (e.target.classList.contains('admin-submit-feedback-btn')) {
             e.target.disabled = false;
         }
     }
+    if (e.target.classList.contains('student-append-reply-btn')) {
+    const taskId = e.target.getAttribute('data-id');
+    const fileInput = document.getElementById(`append-reply-file-${taskId}`);
+    const nameInput = document.getElementById(`append-reply-pdf-name-${taskId}`);
+    const files = fileInput.files;
+    if (files.length === 0) { alert("請先選擇至少一張補充解答檔案！"); return; }
+
+    try {
+        e.target.innerText = "追加上傳中...";
+        e.target.disabled = true;
+
+        const uploadResults = await uploadMultipleFilesToCloudinary(files);
+        const newUrls = uploadResults.map(res => res.url);
+        const newPdfNames = parsePdfNames(nameInput ? nameInput.value : "", files.length);
+
+        // 讀取目前任務 document，進行陣列合併
+        const taskRef = doc(db, "tasks", taskId);
+        const taskDoc = await getDoc(taskRef);
+        if (taskDoc.exists()) {
+            const data = taskDoc.data();
+            const existingUrls = data.studentReplyUrls || [];
+            const existingNames = data.studentReplyPdfNames || [];
+
+            const updatedUrls = [...existingUrls, ...newUrls];
+            const updatedNames = [...existingNames, ...newPdfNames];
+
+            await updateDoc(taskRef, {
+                studentReplyUrls: updatedUrls,
+                studentReplyPdfNames: updatedNames,
+                replyTimestamp: serverTimestamp() // 更新繳交時間戳記，連動 Dashboard 排序
+            });
+
+            alert("🎉 補充解答追加上傳成功！");
+            
+            // 重新整理畫面
+            const selectedModeBtn = document.querySelector('.mode-btn.selected');
+            if (selectedModeBtn) selectedModeBtn.click();
+        }
+    } catch (error) {
+        console.error(error);
+        alert("追加上傳失敗，請檢查網路。");
+    } finally {
+        e.target.innerText = "送出補充解答";
+        e.target.disabled = false;
+    }
+}
+
+// ==========================================
+// ➕ 新增：【老師】補充批改上傳事件
+// ==========================================
+if (e.target.classList.contains('admin-append-feedback-btn')) {
+    const taskId = e.target.getAttribute('data-id');
+    const fileInput = document.getElementById(`append-feedback-file-${taskId}`);
+    const nameInput = document.getElementById(`append-feedback-pdf-name-${taskId}`);
+    const files = fileInput.files;
+    if (files.length === 0) { alert("請先選擇至少一張補充批改檔案！"); return; }
+
+    try {
+        e.target.innerText = "追加批改中...";
+        e.target.disabled = true;
+
+        const uploadResults = await uploadMultipleFilesToCloudinary(files);
+        const newUrls = uploadResults.map(res => res.url);
+        const newPdfNames = parsePdfNames(nameInput ? nameInput.value : "", files.length);
+
+        // 讀取目前任務 document，進行陣列合併
+        const taskRef = doc(db, "tasks", taskId);
+        const taskDoc = await getDoc(taskRef);
+        if (taskDoc.exists()) {
+            const data = taskDoc.data();
+            const existingUrls = data.teacherFeedbackUrls || [];
+            const existingNames = data.teacherFeedbackPdfNames || [];
+
+            const updatedUrls = [...existingUrls, ...newUrls];
+            const updatedNames = [...existingNames, ...newPdfNames];
+
+            await updateDoc(taskRef, {
+                teacherFeedbackUrls: updatedUrls,
+                teacherFeedbackPdfNames: updatedNames,
+                feedbackTimestamp: serverTimestamp() // 連動學生的 Dashboard 最新批改排序
+            });
+
+            alert("👩‍🏫 補充批改追加成功！");
+            loadAdminHistory(); // 重新整理老師後台歷史
+        }
+    } catch (error) {
+        console.error(error);
+        alert("追加批改失敗，請檢查網路。");
+    } finally {
+        e.target.innerText = "送出補充批改";
+        e.target.disabled = false;
+    }
+}
 });
 
 // ==========================================
