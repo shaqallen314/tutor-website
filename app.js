@@ -717,19 +717,34 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
             );
 
             const querySnapshot = await getDocs(q);
-            studentTaskList.innerHTML = ""; 
+studentTaskList.innerHTML = ""; 
 
-            if (querySnapshot.empty) {
-                const emptyMessage = currentType === "講義" ? "目前尚未有講義喔！📚" : "目前沒有未完成的作業喔！🎉";
-                studentTaskList.innerHTML = `<p style='text-align:center; color:#7f8c8d;'>${emptyMessage}</p>`;
-                return;
-            }
+if (querySnapshot.empty) {
+    const emptyMessage = currentType === "講義" ? "目前尚未有講義喔！📚" : "目前沒有未完成的作業喔！🎉";
+    studentTaskList.innerHTML = `<p style='text-align:center; color:#7f8c8d;'>${emptyMessage}</p>`;
+    return;
+}
 
-            querySnapshot.forEach((documentSnapshot) => {
-                const task = documentSnapshot.data();
-                const taskId = documentSnapshot.id; 
-                const modeBadge = task.mode ? `<span style="background: #95a5a6; color: white; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">${task.mode}</span>` : '';
+// 🌟 新增 1：先將抓到的所有資料放進一個陣列中
+let tasksData = [];
+querySnapshot.forEach((documentSnapshot) => {
+    tasksData.push({
+        id: documentSnapshot.id,      // 把文件 ID 也存進去
+        ...documentSnapshot.data()    // 展開所有資料內容
+    });
+});
 
+// 🌟 新增 2：對陣列進行時間排序 (越新的 timestamp 排越前面)
+tasksData.sort((a, b) => {
+    const timeA = a.timestamp ? a.timestamp.toMillis() : 0;
+    const timeB = b.timestamp ? b.timestamp.toMillis() : 0;
+    return timeB - timeA; // B 減 A 代表由大到小 (新到舊)
+});
+
+// 🌟 新增 3：將原本的 querySnapshot.forEach 改成對排序好的 tasksData 跑迴圈
+tasksData.forEach((task) => {
+    const taskId = task.id; 
+    const modeBadge = task.mode ? `<span style="background: #95a5a6; color: white; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">${task.mode}</span>` : '';
 // 🌟 改為搜尋引擎可以辨識的 class，並取消預設 padding 讓細節掌控
                 const taskCard = document.createElement('div');
                 taskCard.className = 'card task-item-card';
