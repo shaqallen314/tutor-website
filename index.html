@@ -102,6 +102,12 @@
                 <div id="search-area" style="display: none; margin-bottom: 20px;">
                     <input type="text" id="task-search-input" placeholder="🔍 輸入關鍵字搜尋標題..." style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-family: inherit; font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.02);">
                 </div>
+                <div id="weekly-progress-area" style="display: none; margin-bottom: 20px; background: #fff; padding: 20px; border-radius: 12px; border-top: 5px solid #27ae60; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                    <h3 style="margin-top: 0; color: #27ae60; border-bottom: 1px dashed #27ae60; padding-bottom: 10px;">📅 本週專屬學習任務</h3>
+                        <div id="weekly-progress-content">
+                            <!-- 這裡將由 JavaScript 動態填入 CSV 資料 -->
+                        </div>
+                </div>
 
                 <div id="subject-area" style="display: none;">
                     <div class="grid-container">
@@ -132,8 +138,11 @@
     </div>
 
     <div id="sidebar" class="sidebar">
+        <div class="sidebar-item btn-flyout" data-type="首頁">🏠 學習總覽</div>
+        <div class="sidebar-item btn-flyout" data-type="本週進度">📅 本週進度</div>
         <div class="sidebar-item btn-flyout" data-type="講義">📖 觀念講義</div>
         <div class="sidebar-item btn-flyout" data-type="練習題">✏️ 實戰練習題</div>
+        <div class="sidebar-item btn-flyout" data-type="線上測驗">⏱️ 線上測驗</div>
     </div>
 
     <script type="module" src="app.js?v=1.1"></script>

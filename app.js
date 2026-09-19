@@ -24,6 +24,7 @@ const db = getFirestore(app);
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/djyt6fh9g/auto/upload";
 const CLOUDINARY_UPLOAD_PRESET = "zazj8sfj";
+const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6t2vxIxr_m29Wum0RgkCs_6iFAQu_n0sfY2npD7fCDuNv-ctppPtL1sE_6IWoOItzeAVK_03oU4IN/pub?output=csv";
 
 
 // ==========================================
@@ -134,6 +135,10 @@ onAuthStateChanged(auth, async (user) => {
                 if(document.getElementById('search-area')) document.getElementById('search-area').style.display = 'none';
                 if(document.getElementById('student-dashboard')) document.getElementById('student-dashboard').style.display = 'block';
                 if(typeof loadStudentDashboard === "function") loadStudentDashboard();
+                if(document.getElementById('weekly-progress-area')) {
+                    document.getElementById('weekly-progress-area').style.display = 'block';
+                        if(typeof loadWeeklyProgress === "function") loadWeeklyProgress();
+                    }
             }
 
         } catch (error) {
@@ -166,6 +171,12 @@ document.querySelectorAll('.sidebar-item').forEach(item => {
         currentType = e.target.getAttribute('data-type');
         
         if (isAdmin) {
+            // 【老師視角】
+            if (currentType === "首頁" || currentType === "本週進度") {
+                alert("📅 老師，首頁與進度表為學生專屬畫面。如需查看，請使用「模擬視角」功能！");
+                sidebar.classList.remove('active');
+                return;
+            }
             if (selectedStudents.length === 0) {
                 alert("請先在畫面上選擇至少一位學生！");
                 sidebar.classList.remove('active');
@@ -175,19 +186,65 @@ document.querySelectorAll('.sidebar-item').forEach(item => {
             adminUploadArea.style.display = 'none'; 
             adminHistoryArea.style.display = 'none';
         } else {
-            sectionTitle.innerText = currentType === "講義" ? "📖 講義區" : "✏️ 練習題區";
-            sectionDesc.innerText = "請選擇科目：";
-            subjectArea.style.display = 'block';
-            modeArea.style.display = 'none'; 
-            document.querySelectorAll('.subject-btn, .mode-btn').forEach(btn => btn.classList.remove('selected'));
-            if(document.getElementById('student-dashboard')) document.getElementById('student-dashboard').style.display = 'none';
-            if(document.getElementById('search-area')) document.getElementById('search-area').style.display = 'none';
-            if(document.getElementById('student-task-list')) document.getElementById('student-task-list').innerHTML = '';
+            // 【學生視角與模擬視角】
+            const searchArea = document.getElementById('search-area');
+            const weeklyProgressArea = document.getElementById('weekly-progress-area');
+            const dashboardArea = document.getElementById('student-dashboard');
+            
+            if (currentType === "首頁") {
+                // 🌟 點擊首頁：同時顯示「作業待辦(Dashboard)」與「本週進度」
+                sectionTitle.innerText = `👋 歡迎回來，${currentLoggedInStudent}！`;
+                sectionDesc.innerText = "以下是你的最新學習動態與本週專屬任務：";
+                
+                subjectArea.style.display = 'none';
+                modeArea.style.display = 'none';
+                if (searchArea) searchArea.style.display = 'none';
+                document.getElementById('student-task-list').innerHTML = '';
+                
+                if (dashboardArea) {
+                    dashboardArea.style.display = 'block';
+                    if (typeof loadStudentDashboard === "function") loadStudentDashboard();
+                }
+                if (weeklyProgressArea) {
+                    weeklyProgressArea.style.display = 'block';
+                    if (typeof loadWeeklyProgress === "function") loadWeeklyProgress();
+                }
+                
+            } else if (currentType === "本週進度") {
+                // 🌟 點擊本週進度：只顯示進度表 (隱藏上面的待辦作業)
+                sectionTitle.innerText = "📅 本週進度";
+                sectionDesc.innerText = "以下是你本週的專屬學習目標，請依照進度確實完成喔！";
+                
+                subjectArea.style.display = 'none';
+                modeArea.style.display = 'none';
+                if (searchArea) searchArea.style.display = 'none';
+                if (dashboardArea) dashboardArea.style.display = 'none';
+                document.getElementById('student-task-list').innerHTML = '';
+                
+                if (weeklyProgressArea) {
+                    weeklyProgressArea.style.display = 'block';
+                    if (typeof loadWeeklyProgress === "function") loadWeeklyProgress();
+                }
+                
+            } else {
+                // 🌟 點擊講義或練習題：顯示科目選擇按鈕
+                sectionTitle.innerText = currentType === "講義" ? "📖 講義區" : "✏️ 練習題區";
+                sectionDesc.innerText = "請選擇科目：";
+                
+                subjectArea.style.display = 'block';
+                modeArea.style.display = 'none'; 
+                
+                if (weeklyProgressArea) weeklyProgressArea.style.display = 'none'; 
+                if (dashboardArea) dashboardArea.style.display = 'none';
+                if (searchArea) searchArea.style.display = 'none';
+                
+                document.querySelectorAll('.subject-btn, .mode-btn').forEach(btn => btn.classList.remove('selected'));
+                document.getElementById('student-task-list').innerHTML = '';
+            }
         }
         sidebar.classList.remove('active'); 
     });
 });
-
 // ==========================================
 // 6. 老師端專屬功能
 // ==========================================
@@ -586,7 +643,9 @@ if (hasFeedback) {
 // 7. 學生端專屬功能
 // ==========================================
 
-// 🌟 7-0. 載入學生待辦儀表板
+// ==========================================
+// 🌟 7-0. 載入學生最新動態儀表板 (支援 14 天自動隱藏機制)
+// ==========================================
 async function loadStudentDashboard() {
     const dashboardContent = document.getElementById('student-dashboard-content');
     if (!dashboardContent) return;
@@ -594,7 +653,6 @@ async function loadStudentDashboard() {
     dashboardContent.innerHTML = "<p style='color: #7f8c8d; font-size: 13px; margin: 0;'>🔄 正在掃描你的最新任務與老師回饋...</p>";
 
     try {
-        // 🌟 改動 1：移除 status == "未完成" 的限制，一次抓回該學生的所有練習題
         const q = query(collection(db, "tasks"), 
             where("students", "array-contains", currentLoggedInStudent),
             where("type", "==", "練習題")
@@ -603,65 +661,78 @@ async function loadStudentDashboard() {
         const snapshot = await getDocs(q);
         
         if (snapshot.empty) {
-            dashboardContent.innerHTML = "<p style='color: #27ae60; font-weight: bold; margin: 0;'>🎉 目前沒有任何指派的任務喔！</p>";
+            dashboardContent.innerHTML = "<p style='color: #27ae60; font-weight: bold; margin: 0;'>🎉 目前沒有任何近期的任務喔！</p>";
             return;
         }
 
-        let pendingTasks = []; // 放未完成的
-        let gradedTasks = [];  // 放已批改的
+        let pendingTasks = []; 
+        let gradedTasks = [];  
 
-        // 🌟 改動 2：將抓回來的資料分門別類
+        // 🌟 新增：設定時間過濾基準
+        const now = Date.now();
+        const TWO_WEEKS_MS = 14 * 24 * 60 * 60 * 1000; // 14天的毫秒數
+
         snapshot.forEach(doc => {
             const task = doc.data();
+            
             if (task.status === "未完成") {
-                pendingTasks.push(task);
+                // 取出發布時間
+                const taskTime = task.timestamp ? task.timestamp.toMillis() : 0;
+                // 判斷：(現在時間 - 發布時間) 小於等於兩週，才顯示在首頁待辦
+                if (now - taskTime <= TWO_WEEKS_MS) {
+                    pendingTasks.push(task);
+                }
             } 
-            // 如果狀態是已完成，且老師有上傳批改圖片，才放進 gradedTasks
-            else if (task.status === "已完成" && (task.teacherFeedbackUrls?.length > 0 || task.teacherFeedbackUrl)) {
-                gradedTasks.push(task);
+            else if (task.status === "已完成" && (task.teacherFeedbackUrls?.length > 0 || !!task.teacherFeedbackUrl)) {
+                // 取出批改時間 (若無批改時間戳記，則退回用繳交時間)
+                const feedbackTime = task.feedbackTimestamp ? task.feedbackTimestamp.toMillis() : (task.replyTimestamp ? task.replyTimestamp.toMillis() : 0);
+                // 判斷：(現在時間 - 批改時間) 小於等於兩週，才顯示在首頁最新批改
+                if (now - feedbackTime <= TWO_WEEKS_MS) {
+                    gradedTasks.push(task);
+                }
             }
         });
 
-        // 🌟 改動 3：分別進行排序
-        // 未完成作業：依「發布時間」降冪排序 (新的在上面)
+        // 如果過濾完兩週內的資料後發現都是空的
+        if (pendingTasks.length === 0 && gradedTasks.length === 0) {
+            dashboardContent.innerHTML = "<p style='color: #27ae60; font-weight: bold; margin: 0; font-size: 14px;'>🎉 近期沒有積欠的作業，批改也都確認過囉！</p>";
+            return;
+        }
+
+        // 分別進行降冪排序 (新的在上面)
         pendingTasks.sort((a, b) => {
             const timeA = a.timestamp ? a.timestamp.toMillis() : 0;
             const timeB = b.timestamp ? b.timestamp.toMillis() : 0;
             return timeB - timeA; 
         });
 
-        // 已批改作業：依「批改時間」降冪排序 (新的在上面)
-        // 防呆：如果是舊資料沒有 feedbackTimestamp，就退回用繳交時間或發布時間來排
         gradedTasks.sort((a, b) => {
             const timeA = a.feedbackTimestamp ? a.feedbackTimestamp.toMillis() : (a.replyTimestamp ? a.replyTimestamp.toMillis() : 0);
             const timeB = b.feedbackTimestamp ? b.feedbackTimestamp.toMillis() : (b.replyTimestamp ? b.replyTimestamp.toMillis() : 0);
             return timeB - timeA;
         });
 
-        // 🌟 改動 4：將分類好的資料轉換為 HTML 輸出
         let html = "";
 
         // 區塊 A：未完成的作業 (紅字)
         if (pendingTasks.length > 0) {
             html += `<div style="margin-bottom: ${gradedTasks.length > 0 ? '15px' : '0'};">`;
-            html += `<h4 style="margin: 0 0 8px 0; color: #c0392b; font-size: 14px;">🚨 尚未繳交：</h4>`;
+            html += `<h4 style="margin: 0 0 8px 0; color: #c0392b; font-size: 14px;">🚨 近期待繳交：</h4>`;
             html += `<ul style="margin: 0; padding-left: 20px; color: #c0392b; font-size: 14px; line-height: 1.6;">`;
             pendingTasks.forEach(task => {
                 html += `<li><strong>【${task.subject}】</strong> ${task.title}</li>`;
             });
             html += `</ul></div>`;
         } else {
-            // 如果沒有待辦，給予鼓勵的文字
             html += `<div style="margin-bottom: ${gradedTasks.length > 0 ? '15px' : '0'};">`;
-            html += `<p style="color: #27ae60; font-weight: bold; margin: 0; font-size: 14px;">🎉 太棒了！你目前沒有任何積欠的作業！</p>`;
+            html += `<p style="color: #27ae60; font-weight: bold; margin: 0; font-size: 14px;">🎉 太棒了！近期沒有任何積欠的作業！</p>`;
             html += `</div>`;
         }
 
         // 區塊 B：已經批改的作業 (綠字)
         if (gradedTasks.length > 0) {
-            // 如果上面有待辦區塊，這裡加一條虛線分隔一下比較好看
             html += `<div style="border-top: 1px dashed #ccc; padding-top: 12px;">`;
-            html += `<h4 style="margin: 0 0 8px 0; color: #27ae60; font-size: 14px;">✅ 最新批改出爐 (點選左側選單查看)：</h4>`;
+            html += `<h4 style="margin: 0 0 8px 0; color: #27ae60; font-size: 14px;">✅ 兩週內最新批改 (點選左側選單查看)：</h4>`;
             html += `<ul style="margin: 0; padding-left: 20px; color: #27ae60; font-size: 14px; line-height: 1.6;">`;
             gradedTasks.forEach(task => {
                 html += `<li><strong>【${task.subject}】</strong> ${task.title}</li>`;
@@ -1130,29 +1201,36 @@ if (simulateStudentBtn && exitSimulationBtn) {
             alert("請先選擇一位學生！");
             return;
         }
-        
-        // 1. 暫時將全域狀態切換為學生
-        isAdmin = false;
-        currentLoggedInStudent = adminSelectedStudent;
-        
-        // 2. 切換 UI 面板
-        document.getElementById('admin-panel').style.display = 'none';
-        document.getElementById('student-panel').style.display = 'block';
-        exitSimulationBtn.style.display = 'block'; // 亮出返回按鈕
-        
-        // 3. 更新學生畫面文字
-        document.getElementById('section-title').innerText = `👀 模擬視角：${currentLoggedInStudent} 的主頁`;
-        document.getElementById('section-desc').innerText = "目前處於模擬模式，你可以像學生一樣查看、操作任何功能。";
-        
-        // 4. 重置畫面準備
-        document.getElementById('subject-area').style.display = 'block'; // 顯示科目選擇
-        document.getElementById('mode-area').style.display = 'none';
-        document.getElementById('student-task-list').innerHTML = '';
-        
-        // 🌟 補上這兩行：在進入模擬模式時，把儀表板顯示出來並啟動掃描！
+    
+    // 1. 暫時將全域狀態切換為學生
+    isAdmin = false;
+    currentLoggedInStudent = adminSelectedStudent;
+    
+    // 2. 切換 UI 面板
+    document.getElementById('admin-panel').style.display = 'none';
+    document.getElementById('student-panel').style.display = 'block';
+    exitSimulationBtn.style.display = 'block'; 
+    
+    // 3. 更新學生畫面文字
+    document.getElementById('section-title').innerText = `👀 模擬視角：${currentLoggedInStudent} 的主頁`;
+    document.getElementById('section-desc').innerText = "請透過左上角選單 (☰) 切換「講義」或「練習題」來查看科目。";
+    
+    // 4. 重置畫面準備 (🌟 修正：進入首頁時應隱藏科目按鈕)
+    document.getElementById('subject-area').style.display = 'none'; // 🔴 這裡原本是 block，請改成 none
+    document.getElementById('mode-area').style.display = 'none';
+    document.getElementById('student-task-list').innerHTML = '';
+    
+    // 5. 顯示學生專屬儀表板與進度表
+    if(document.getElementById('student-dashboard')) {
         document.getElementById('student-dashboard').style.display = 'block';
         if(typeof loadStudentDashboard === "function") loadStudentDashboard();
-    });
+    }
+    
+    if(document.getElementById('weekly-progress-area')) {
+        document.getElementById('weekly-progress-area').style.display = 'block';
+        if(typeof loadWeeklyProgress === "function") loadWeeklyProgress();
+    }
+});
 
     // 結束模擬，退回老師模式
     exitSimulationBtn.addEventListener('click', () => {
@@ -1191,4 +1269,103 @@ if(taskSearchInput) {
             }
         });
     });
+}
+
+// ==========================================
+// 11. 讀取並解析 Google Sheets (CSV) 本週進度
+// ==========================================
+async function loadWeeklyProgress() {
+    const container = document.getElementById('weekly-progress-content');
+    if (!container) return;
+
+    container.innerHTML = "<p style='color: #7f8c8d; text-align: center;'>🔄 正在從雲端抓取最新進度，請稍候...</p>";
+
+    try {
+        const response = await fetch(GOOGLE_SHEET_CSV_URL);
+        if (!response.ok) throw new Error("網路回應異常");
+        
+        const csvText = await response.text();
+        
+        const rows = csvText.split('\n').map(row => {
+            const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/; 
+            return row.split(regex).map(e => e.replace(/^"|"$/g, "").trim());
+        });
+
+        const headers = rows.shift(); 
+        let pendingTasks = [];
+        let completedTasks = [];
+
+        // 依據對象過濾，並依據第五欄(索引 4)的狀態進行分流
+        rows.forEach(task => {
+            if (task.length < 3) return; // 避開空白行
+            const targetStudent = task[0];
+            if (targetStudent === "全體" || targetStudent === currentLoggedInStudent) {
+                const status = (task[5] || "").trim();
+                if (status === "已完成") {
+                    completedTasks.push(task);
+                } else {
+                    pendingTasks.push(task);
+                }
+            }
+        });
+
+        if (pendingTasks.length === 0 && completedTasks.length === 0) {
+            container.innerHTML = `<p style="color: #27ae60; font-weight: bold; text-align: center;">🎉 本週目前沒有特別指派的任務喔！</p>`;
+            return;
+        }
+
+        // 產生任務卡片的輔助函式
+        const renderTaskCard = (task, isCompleted) => {
+            const dateStr = task[1] || "";
+            const subject = task[2] || "一般";
+            const content = task[3] || "";
+            const noteText = task[4] || "";
+            
+            // 根據是否完成切換樣式色彩
+            const borderColor = isCompleted ? '#bdc3c7' : '#3498db';
+            const bgColor = isCompleted ? '#f8f9fa' : '#fafbfc';
+            const textColor = isCompleted ? '#7f8c8d' : '#2c3e50';
+            const textDecoration = isCompleted ? 'line-through' : 'none';
+            const badgeBg = isCompleted ? '#95a5a6' : '#34495e';
+            
+            const noteHTML = noteText ? `<p style="font-size: 13px; color: ${isCompleted ? '#7f8c8d' : '#e67e22'}; background: ${isCompleted ? '#f0f3f4' : '#fff3cd'}; padding: 5px 10px; border-radius: 6px; margin: 8px 0 0 0; display: inline-block;">💡 備註：${noteText}</p>` : "";
+            const dateHTML = dateStr ? `<span style="font-size: 12px; color: ${isCompleted ? '#bdc3c7' : '#e74c3c'}; font-weight: bold; margin-left: auto;">🗓️ ${dateStr}</span>` : "";
+            
+            return `
+                <div style="border: 1px solid #e0e0e0; border-left: 4px solid ${borderColor}; padding: 15px; border-radius: 8px; background: ${bgColor}; margin-bottom: 12px; opacity: ${isCompleted ? '0.85' : '1'};">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                        <span style="background: ${badgeBg}; color: #fff; font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: bold;">${subject}</span>
+                        ${isCompleted ? '<span style="font-size: 12px;">✅</span>' : ''}
+                        ${dateHTML}
+                    </div>
+                    <div style="font-size: 15px; color: ${textColor}; font-weight: bold; line-height: 1.5; text-decoration: ${textDecoration};">${content}</div>
+                    ${noteHTML}
+                </div>
+            `;
+        };
+
+        let html = "";
+
+        // 區塊 A：未完成任務
+        if (pendingTasks.length > 0) {
+            html += `<h4 style="margin: 0 0 10px 0; color: #e74c3c; font-size: 14px;">🎯 待完成目標：</h4>`;
+            pendingTasks.forEach(task => html += renderTaskCard(task, false));
+        } else {
+            html += `<p style="color: #27ae60; font-weight: bold; margin-bottom: 15px;">🎉 太棒了！本週的待辦目標已全數達成！</p>`;
+        }
+
+        // 區塊 B：已完成任務
+        if (completedTasks.length > 0) {
+            html += `<div style="border-top: 1px dashed #ccc; padding-top: 15px; margin-top: 5px;">`;
+            html += `<h4 style="margin: 0 0 10px 0; color: #27ae60; font-size: 14px;">✅ 已完成進度：</h4>`;
+            completedTasks.forEach(task => html += renderTaskCard(task, true));
+            html += `</div>`;
+        }
+
+        container.innerHTML = html;
+
+    } catch (error) {
+        console.error("抓取 CSV 失敗：", error);
+        container.innerHTML = `<p style="color: #e74c3c; text-align: center;">讀取失敗，請確認 Google Sheets 是否已發布到網路。</p>`;
+    }
 }
