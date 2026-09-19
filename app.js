@@ -436,7 +436,6 @@ publishImgBtn.addEventListener('click', async () => {
     const files = exerciseFileInput.files; 
     const hint = exerciseHintInput.value;
     
-    // ➕ 抓取自訂 PDF 名稱欄位
     const pdfNameInput = document.getElementById('exercise-pdf-name');
     const pdfNamesText = pdfNameInput ? pdfNameInput.value : "";
 
@@ -452,41 +451,45 @@ publishImgBtn.addEventListener('click', async () => {
         const uploadResults = await uploadMultipleFilesToCloudinary(files);
         const fileUrls = uploadResults.map(res => res.url);
         const cloudinaryIds = uploadResults.map(res => res.publicId);
-        
-        // ➕ 解析 PDF 名稱陣列
         const exercisePdfNames = parsePdfNames(pdfNamesText, files.length);
 
-        await addDoc(collection(db, "tasks"), {
-            students: selectedStudents,     
-            subject: currentSubject,
-            type: "練習題",
-            mode: adminModeSelect.value,
-            title: title,
-            hint: hint,
-            fileUrls: fileUrls,             
-            cloudinaryIds: cloudinaryIds,   
-            exercisePdfNames: exercisePdfNames, // ➕ 儲存題目 PDF 名稱
-            status: "未完成",
-            studentReplyUrls: [],           
-            studentReplyPdfNames: [],           // ➕ 初始化解答名稱欄位
-            teacherFeedbackUrls: [],        
-            teacherFeedbackPdfNames: [],        // ➕ 初始化批改名稱欄位
-            timestamp: serverTimestamp()
+        // 🌟 修正核心：不再共用單一文件，而是替每一位勾選的學生派發「獨立的作業副本」
+        const addPromises = selectedStudents.map(studentName => {
+            return addDoc(collection(db, "tasks"), {
+                students: [studentName], // 這裡改為只放單一學生，但維持陣列格式以相容既有的搜尋邏輯
+                subject: currentSubject,
+                type: "練習題",
+                mode: adminModeSelect.value,
+                title: title,
+                hint: hint,
+                fileUrls: fileUrls,             
+                cloudinaryIds: cloudinaryIds,   
+                exercisePdfNames: exercisePdfNames, 
+                status: "未完成",
+                studentReplyUrls: [],           
+                studentReplyPdfNames: [],           
+                teacherFeedbackUrls: [],        
+                teacherFeedbackPdfNames: [],        
+                timestamp: serverTimestamp()
+            });
         });
 
-        alert(`🎉 題目已成功發布！`);
+        // 等待所有學生的作業副本都建立完成
+        await Promise.all(addPromises);
+
+        alert(`🎉 題目已成功發布！每位學生皆已收到專屬的作業副本。`);
         
         exerciseTitleInput.value = "";
         exerciseFileInput.value = "";
         exerciseHintInput.value = "";
-        if (pdfNameInput) pdfNameInput.value = ""; // ➕ 清空欄位
+        if (pdfNameInput) pdfNameInput.value = ""; 
         
         loadAdminHistory(); 
     } catch (error) {
         console.error(error);
         alert("發布失敗，請檢查控制台。");
     } finally {
-        publishImgBtn.innerText = "發布題目";
+        publishImgBtn.innerText = "發布題目 (圖片)";
         publishImgBtn.disabled = false;
     }
 });
