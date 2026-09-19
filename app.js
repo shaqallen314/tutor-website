@@ -819,51 +819,73 @@ tasksData.sort((a, b) => {
 tasksData.forEach((task) => {
     const taskId = task.id; 
     const modeBadge = task.mode ? `<span style="background: #95a5a6; color: white; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold;">${task.mode}</span>` : '';
-// 🌟 改為搜尋引擎可以辨識的 class，並取消預設 padding 讓細節掌控
-                const taskCard = document.createElement('div');
-                taskCard.className = 'card task-item-card';
-                taskCard.style.marginTop = '15px';
-                taskCard.style.border = '1px solid #e0e0e0';
-                taskCard.style.padding = '0'; 
-                taskCard.style.overflow = 'hidden';
 
-                if (task.type === "講義") {
-                    const downloadFileName = task.originalFileName || `${task.title}.pdf`;
-                    taskCard.innerHTML = `
-                        <details style="background: #fff; cursor: pointer; transition: all 0.3s ease;">
-                            <summary class="task-summary" style="padding: 15px; font-size: 16px; font-weight: bold; color: #2c3e50; outline: none; user-select: none; border-bottom: 1px solid transparent;">
-                                📄 ${task.title}
-                            </summary>
-                            <div style="padding: 0 15px 15px 15px; border-top: 1px dashed #eee; cursor: auto; background: #fafbfc;">
-                                <div style="display: flex; gap: 10px; margin-top: 5px;">
-                                    <a href="${task.fileUrl}" target="_blank" class="primary-btn" style="flex: 1; box-sizing: border-box; text-align:center; text-decoration:none; background-color:#3498db; padding: 10px;">🔍 線上觀看</a>
-                                    <button class="primary-btn student-download-pdf-btn" data-url="${task.fileUrl}" data-filename="${downloadFileName}" style="flex: 1; background-color:#27ae60; padding: 10px;">⬇️ 儲存檔案</button>
-                                </div>
-                            </div>
-                        </details>
-                    `;
-                } else if (task.type === "練習題") {
-    const isCompleted = task.status === "已完成";
-    const hasFeedback = task.teacherFeedbackUrls?.length > 0 || !!task.teacherFeedbackUrl; 
+    const taskCard = document.createElement('div');
+    taskCard.className = 'card task-item-card';
+    taskCard.style.marginTop = '15px';
+    taskCard.style.border = '1px solid #e0e0e0';
+    taskCard.style.padding = '0'; 
+    taskCard.style.overflow = 'hidden';
 
-    let innerHTML = `
-        <details style="background: #fff; cursor: pointer; transition: all 0.3s ease;">
-            <summary class="task-summary" style="padding: 15px; font-size: 16px; font-weight: bold; color: #2c3e50; outline: none; user-select: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-bottom: 1px solid transparent;">
-                📝 ${task.title} ${modeBadge}
-            </summary>
-            <div style="padding: 0 15px 15px 15px; border-top: 1px dashed #eee; cursor: auto; background: #fafbfc;">
-                ${task.hint ? `<p style="background:#fff3cd; padding:10px; border-radius:8px; color:#856404; margin-top:0;">💡 老師叮嚀：${task.hint}</p>` : ''}
-                
-                <details style="cursor: pointer; margin-bottom: 15px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0;">
-                    <summary style="font-weight: bold; color: #3498db; outline: none; user-select: none;">
-                        🖼️ 點擊展開/收合題目圖片
-                    </summary>
-                    <div style="margin-top: 10px;">
-                        ${generateGalleryHTML(task.fileUrls || task.fileUrl, '#e67e22', task.exercisePdfNames || [])}
+    if (task.type === "講義") {
+        // 🌟 講義專屬 Color Code (藍色邊框)
+        taskCard.style.borderLeft = '5px solid #3498db';
+        const downloadFileName = task.originalFileName || `${task.title}.pdf`;
+        
+        taskCard.innerHTML = `
+            <details style="background: #fff; cursor: pointer; transition: all 0.3s ease;">
+                <summary class="task-summary" style="padding: 15px; font-size: 16px; font-weight: bold; color: #2c3e50; outline: none; user-select: none; border-bottom: 1px solid transparent; display: flex; justify-content: space-between; align-items: center;">
+                    <span>📄 ${task.title}</span>
+                    <span style="background: #ebf5fb; color: #3498db; border: 1px solid #aed6f1; padding: 3px 8px; border-radius: 12px; font-size: 12px;">📖 講義</span>
+                </summary>
+                <div style="padding: 0 15px 15px 15px; border-top: 1px dashed #eee; cursor: auto; background: #fafbfc;">
+                    <div style="display: flex; gap: 10px; margin-top: 5px;">
+                        <a href="${task.fileUrl}" target="_blank" class="primary-btn" style="flex: 1; box-sizing: border-box; text-align:center; text-decoration:none; background-color:#3498db; padding: 10px;">🔍 線上觀看</a>
+                        <button class="primary-btn student-download-pdf-btn" data-url="${task.fileUrl}" data-filename="${downloadFileName}" style="flex: 1; background-color:#27ae60; padding: 10px;">⬇️ 儲存檔案</button>
                     </div>
-                </details>
-                <div style="background:#f8f9fa; padding:15px; border-radius:8px;">
-    `;
+                </div>
+            </details>
+        `;
+    } else if (task.type === "練習題") {
+        const isCompleted = task.status === "已完成";
+        const hasFeedback = task.teacherFeedbackUrls?.length > 0 || !!task.teacherFeedbackUrl; 
+
+        // 🌟 練習題 Color Code 邏輯判斷
+        let statusColor = "#e74c3c"; // 預設未繳交 (紅)
+        let statusBadge = `<span style="background: #fdf2e9; color: #e74c3c; border: 1px solid #fadbd8; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-left: auto;">🚨 未繳交</span>`;
+
+        if (isCompleted) {
+            if (hasFeedback) {
+                statusColor = "#8e44ad"; // 已批改 (紫)
+                statusBadge = `<span style="background: #f4ecf7; color: #8e44ad; border: 1px solid #d7bde2; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-left: auto;">👩‍🏫 已批改</span>`;
+            } else {
+                statusColor = "#27ae60"; // 已繳交 (綠)
+                statusBadge = `<span style="background: #e8f8f5; color: #27ae60; border: 1px solid #a9dfbf; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-left: auto;">✅ 已繳交</span>`;
+            }
+        }
+
+        // 將對應的顏色套用到卡片左側邊框
+        taskCard.style.borderLeft = `5px solid ${statusColor}`;
+
+        let innerHTML = `
+            <details style="background: #fff; cursor: pointer; transition: all 0.3s ease;">
+                <summary class="task-summary" style="padding: 15px; font-size: 16px; font-weight: bold; color: #2c3e50; outline: none; user-select: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; border-bottom: 1px solid transparent;">
+                    📝 ${task.title} ${modeBadge}
+                    ${statusBadge} <!-- 🌟 狀態標籤自動靠右顯示 -->
+                </summary>
+                <div style="padding: 0 15px 15px 15px; border-top: 1px dashed #eee; cursor: auto; background: #fafbfc;">
+                    ${task.hint ? `<p style="background:#fff3cd; padding:10px; border-radius:8px; color:#856404; margin-top:0;">💡 老師叮嚀：${task.hint}</p>` : ''}
+                    
+                    <details style="cursor: pointer; margin-bottom: 15px; background: #fff; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0;">
+                        <summary style="font-weight: bold; color: #3498db; outline: none; user-select: none;">
+                            🖼️ 點擊展開/收合題目圖片
+                        </summary>
+                        <div style="margin-top: 10px;">
+                            ${generateGalleryHTML(task.fileUrls || task.fileUrl, '#e67e22', task.exercisePdfNames || [])}
+                        </div>
+                    </details>
+                    <div style="background:#f8f9fa; padding:15px; border-radius:8px;">
+        `;
 
     if (isCompleted) {
         innerHTML += `
