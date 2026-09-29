@@ -6,6 +6,8 @@
     <title>學測數理專屬家教網</title>
     <link rel="stylesheet" href="style.css?v=1.1">
     <link rel="icon" type="image/png" href="./favicon.png">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
 </head>
 
 <body>
@@ -79,11 +81,42 @@
                             <textarea placeholder="老師叮嚀或提示 (選填)..." style="width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #ddd; height: 80px; box-sizing: border-box; font-family: inherit; resize: vertical;"></textarea>
                             <button class="primary-btn" style="background-color: #e67e22;">發布題目 (圖片)</button>
                         </div>
+
+                        <div id="upload-quiz-section" style="display: none;">
+                            <input type="text" id="quiz-title" placeholder="測驗標題 (例如：112學測數學全真模擬考)" style="width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-family: inherit;">
+                            
+                            <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                                <div style="flex: 1;">
+                                    <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #555;">⏱️ 測驗時間 (分鐘)：</label>
+                                    <input type="number" id="quiz-time-limit" min="1" placeholder="例如：100" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-family: inherit;">
+                                </div>
+                                <div style="flex: 2;">
+                                    <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #555;">📎 選擇考卷 (僅限 PDF)：</label>
+                                    <input type="file" id="quiz-file" accept=".pdf" style="width: 100%; padding: 10px;">
+                                </div>
+                            </div>
+                            
+                            <button class="primary-btn" id="publish-quiz-btn" style="background-color: #c0392b;">發布線上測驗</button>
+                        </div>
                     </div>
 
                     <div id="admin-history-area" style="display: none; margin-top: 30px; border-top: 2px solid #ecf0f1; padding-top: 20px;">
                         <h3 style="color: #2c3e50; margin-top: 0;">📋 歷史紀錄與學生繳交狀況</h3>
                         <div id="admin-history-list"></div> 
+                    </div>
+                    <div id="admin-flashcard-report-area" style="display: none; margin-top: 30px; border-top: 2px solid #ecf0f1; padding-top: 20px;">
+                        <h3 style="color: #2c3e50; margin-top: 0;">📊 閃字卡診斷報告</h3>
+                        
+                        <div style="margin-bottom: 15px; background: #f0f3f4; padding: 10px; border-radius: 8px;">
+                            <label style="font-weight: bold; color: #34495e; margin-right: 10px;">📌 選擇字卡組：</label>
+                            <select id="admin-flashcard-select" style="padding: 8px; border-radius: 6px; border: 1px solid #bdc3c7; font-family: inherit; font-size: 14px; min-width: 200px;">
+                                <option value="">請選擇要查看的字卡組...</option>
+                            </select>
+                        </div>
+
+                        <div id="admin-flashcard-report-content" style="background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #e0e0e0;">
+                            <p style="color: #7f8c8d; margin: 0; text-align: center;">請先從上方選擇字卡組以載入學生的診斷紀錄。</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -128,6 +161,119 @@
                 </div>
 
                 <div id="student-task-list" style="margin-top: 20px;"></div>
+                <div id="student-flashcard-area" style="display: none; margin-top: 20px;">
+                    
+                    <!-- 狀態 1. 字卡組選擇清單 -->
+                    <div id="flashcard-selection-area">
+                        <div id="flashcard-deck-list" class="grid-container">
+                            <!-- 這裡將由 JavaScript 動態填入該學生有權限的字卡組按鈕 -->
+                        </div>
+                    </div>
+
+                    <!-- 狀態 2. 測驗進行中畫面 (預設隱藏) -->
+                    <div id="flashcard-test-area" style="display: none; text-align: center;">
+                        <button id="fc-exit-btn" class="primary-btn" style="background-color: #95a5a6; padding: 8px 16px; width: auto; margin-bottom: 15px; float: left;">⬅ 中斷並返回列表</button>
+                        <div style="clear: both;"></div>
+
+                        <h3 id="current-flashcard-title" style="color: #8e44ad; margin-top: 0;">字卡組標題</h3>
+                        <p style="color: #7f8c8d; font-size: 14px; margin-bottom: 20px; font-weight: bold;">進度：<span id="flashcard-progress">1 / 10</span></p>
+                        
+                        <!-- 翻轉卡片本體 -->
+                        <div class="flashcard-container" id="flashcard-container">
+                            <div class="flashcard-inner" id="flashcard-inner">
+                                <div class="flashcard-front">
+                                    <div class="flashcard-content" id="flashcard-front-text">Front</div>
+                                    <div class="flashcard-hint">👆 點擊卡片翻面看解答</div>
+                                </div>
+                                <div class="flashcard-back">
+                                    <div class="flashcard-content" id="flashcard-back-text">Back</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 狀態評估按鈕 (三色) -->
+                        <div class="flashcard-status-btns">
+                            <button class="fc-status-btn fc-good" data-status="精熟">🟢 精熟</button>
+                            <button class="fc-status-btn fc-fair" data-status="不熟">🟡 不熟</button>
+                            <button class="fc-status-btn fc-poor" data-status="完全不會">🔴 完全不會</button>
+                        </div>
+
+                        <!-- 導覽與儲存按鈕 -->
+                        <div class="flashcard-nav-btns">
+                            <button id="fc-prev-btn" class="fc-nav-btn">⬅️️ 上一張</button>
+                            <button id="fc-next-btn" class="fc-nav-btn">下一張 ➡️</button>
+                        </div>
+                        
+                        <button id="fc-finish-btn" class="primary-btn" style="background-color: #27ae60; margin-top: 30px; display: none;">💾 完成測驗！上傳診斷紀錄給老師</button>
+                    </div>
+                </div>
+                <div id="upload-quiz-section" style="display: none;">
+                            <input type="text" id="quiz-title" placeholder="測驗標題 (例如：112學測數學全真模擬考)" style="width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-family: inherit;">
+                            
+                            <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                                <div style="flex: 1;">
+                                    <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #555;">⏱️ 測驗時間 (分鐘)：</label>
+                                    <input type="number" id="quiz-time-limit" min="1" placeholder="例如：100" style="width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-family: inherit;">
+                                </div>
+                                <div style="flex: 2;">
+                                    <label style="display: block; margin-bottom: 5px; font-weight: bold; color: #555;">📎 選擇考卷 (僅限 PDF)：</label>
+                                    <input type="file" id="quiz-file" accept=".pdf" style="width: 100%; padding: 10px;">
+                                </div>
+                            </div>
+                            
+                            <button class="primary-btn" id="publish-quiz-btn" style="background-color: #c0392b;">發布線上測驗</button>
+                        </div>
+
+                <!-- ⬇️ 新增：學生端線上測驗區塊 -->
+                <div id="student-quiz-area" style="display: none; margin-top: 20px;">
+                    
+                    <!-- 狀態 1. 測驗列表 -->
+                    <div id="quiz-list-area">
+                        <div id="quiz-list-container">
+                            <!-- 這裡將動態填入未完成的測驗卡片 -->
+                        </div>
+                    </div>
+
+                    <!-- 狀態 2. 準備大廳 -->
+                    <div id="quiz-lobby-area" class="card" style="display: none; text-align: center; border-left: 5px solid #c0392b;">
+                        <h2 id="lobby-quiz-title" style="color: #c0392b; margin-bottom: 10px;">測驗標題</h2>
+                        <div style="background: #fdf2e9; padding: 15px; border-radius: 8px; margin-bottom: 25px; display: inline-block; text-align: left;">
+                            <p style="margin: 0 0 10px 0; color: #d35400;"><strong>⏱️ 測驗時間：</strong> <span id="lobby-quiz-time">100</span> 分鐘</p>
+                            <p style="margin: 0 0 10px 0; color: #c0392b;"><strong>🚨 防弊機制已啟用：</strong></p>
+                            <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #e74c3c;">
+                                <li>測驗開始後，時間一到將強制收卷。</li>
+                                <li><strong>嚴禁切換分頁、縮小視窗或離開此畫面</strong>，否則系統將立即判定違規並強制收卷！</li>
+                            </ul>
+                        </div>
+                        <br>
+                        <button id="lobby-cancel-btn" class="primary-btn" style="background-color: #95a5a6; width: auto; margin-right: 15px;">取消，晚點再考</button>
+                        <button id="lobby-start-btn" class="primary-btn" style="background-color: #c0392b; width: auto;">🚀 我準備好了，開始測驗</button>
+                    </div>
+
+                    <!-- 狀態 3. 作答進行中畫面 -->
+                    <div id="quiz-active-area" style="display: none;">
+                        <!-- 頂部固定工具列 -->
+                        <div id="quiz-toolbar">
+                            <div class="quiz-timer" id="quiz-timer">100:00</div>
+                            <div class="quiz-tools">
+                                <button class="quiz-tool-btn active" data-tool="pen" data-color="#000000">🖊️ 黑筆</button>
+                                <button class="quiz-tool-btn" data-tool="pen" data-color="#2980b9">🖊️ 藍筆</button>
+                                <button class="quiz-tool-btn" data-tool="pen" data-color="#c0392b">🖊️ 紅筆</button>
+                                <button class="quiz-tool-btn" data-tool="eraser">🧼 橡皮擦</button>
+                                <button id="quiz-submit-early-btn" class="primary-btn" style="background-color: #27ae60; padding: 6px 15px; font-size: 14px; width: auto; margin-left: 15px;">提前交卷</button>
+                            </div>
+                        </div>
+
+                        <!-- 畫布容器：負責疊加 PDF 與手寫層 -->
+                        <div id="quiz-canvas-wrapper">
+                            <p id="quiz-loading-text" style="text-align:center; color:#7f8c8d; margin-top:50px;">🔄 試卷載入中，請稍候...</p>
+                            <!-- 底層：用來渲染 PDF -->
+                            <canvas id="pdf-render-canvas"></canvas>
+                            <!-- 表層：用來捕捉手寫軌跡 -->
+                            <canvas id="drawing-canvas"></canvas>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
     </div> 
@@ -143,6 +289,7 @@
         <div class="sidebar-item btn-flyout" data-type="講義">📖 觀念講義</div>
         <div class="sidebar-item btn-flyout" data-type="練習題">✏️ 實戰練習題</div>
         <div class="sidebar-item btn-flyout" data-type="線上測驗">⏱️ 線上測驗</div>
+        <div class="sidebar-item btn-flyout" data-type="閃字卡">📇 閃字卡診斷</div>
     </div>
 
     <script type="module" src="app.js?v=1.1"></script>

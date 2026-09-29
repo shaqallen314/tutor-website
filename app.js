@@ -3,7 +3,7 @@
 // ==========================================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
-import { getFirestore, collection, addDoc, serverTimestamp, getDocs, query, where, updateDoc, doc, deleteDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, collection, addDoc, serverTimestamp, getDocs, query, where, updateDoc, doc, deleteDoc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
 // ==========================================
 // 2. 系統設定參數 (Firebase & Cloudinary)
@@ -25,6 +25,7 @@ const db = getFirestore(app);
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/djyt6fh9g/auto/upload";
 const CLOUDINARY_UPLOAD_PRESET = "zazj8sfj";
 const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6t2vxIxr_m29Wum0RgkCs_6iFAQu_n0sfY2npD7fCDuNv-ctppPtL1sE_6IWoOItzeAVK_03oU4IN/pub?output=csv";
+
 
 
 // ==========================================
@@ -76,6 +77,31 @@ const subjectArea = document.getElementById('subject-area');
 const modeArea = document.getElementById('mode-area');
 const selectedSubjectLabel = document.getElementById('selected-subject-label');
 const studentTaskList = document.getElementById('student-task-list');
+
+// 🌟 閃字卡資料庫 (請先暫時用這個我幫你建的測試表，之後再換成你的)
+const FLASHCARD_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSBbSC3RL_uwopraxUGv0dYmHsN2-rI60bd-jNujmrvmSeOyda9OlGg7mvoXc9HHKn2XAhSh7Lx42ki/pub?output=csv"; 
+
+// 🌟 閃字卡專屬 DOM 元素
+const studentFlashcardArea = document.getElementById('student-flashcard-area');
+const flashcardSelectionArea = document.getElementById('flashcard-selection-area');
+const flashcardDeckList = document.getElementById('flashcard-deck-list');
+const flashcardTestArea = document.getElementById('flashcard-test-area');
+const currentFlashcardTitle = document.getElementById('current-flashcard-title');
+const flashcardProgress = document.getElementById('flashcard-progress');
+const flashcardContainer = document.getElementById('flashcard-container');
+const flashcardInner = document.getElementById('flashcard-inner');
+const flashcardFrontText = document.getElementById('flashcard-front-text');
+const flashcardBackText = document.getElementById('flashcard-back-text');
+const adminFlashcardReportArea = document.getElementById('admin-flashcard-report-area');
+const adminFlashcardSelect = document.getElementById('admin-flashcard-select');
+const adminFlashcardReportContent = document.getElementById('admin-flashcard-report-content');
+
+// 🌟 閃字卡狀態紀錄變數
+let allFlashcardDecks = {}; // 存放解析後的所有字卡組
+let currentFlashcardDeck = []; // 目前正在測驗的這組字卡陣列
+let currentFlashcardIndex = 0; // 目前翻到第幾張
+let currentDeckTitle = ""; // 目前的字卡組標題
+let flashcardTestResults = {}; // 學生的作答紀錄，格式：{ "正面內容": "精熟/不熟/完全不會" }
 
 // ==========================================
 // 4. 登入、登出與身分驗證邏輯 (家教網 2.0 雲端版)
@@ -182,69 +208,72 @@ document.querySelectorAll('.sidebar-item').forEach(item => {
                 sidebar.classList.remove('active');
                 return;
             }
-            adminSubjectArea.style.display = 'block';
+            
+            // 老師端先全部隱藏
+            adminSubjectArea.style.display = 'none';
             adminUploadArea.style.display = 'none'; 
             adminHistoryArea.style.display = 'none';
+            if (adminFlashcardReportArea) adminFlashcardReportArea.style.display = 'none';
+
+            if (currentType === "閃字卡") {
+                if (selectedStudents.length > 1) {
+                    alert("請「只選擇一位學生」來查看他的閃字卡診斷報告！");
+                    sidebar.classList.remove('active');
+                    return;
+                }
+                adminFlashcardReportArea.style.display = 'block';
+                if (typeof loadAdminFlashcardDropdown === "function") loadAdminFlashcardDropdown();
+            } else {
+                adminSubjectArea.style.display = 'block';
+            }
+
         } else {
             // 【學生視角與模擬視角】
             const searchArea = document.getElementById('search-area');
             const weeklyProgressArea = document.getElementById('weekly-progress-area');
             const dashboardArea = document.getElementById('student-dashboard');
             
+            // 學生端先全部隱藏
+            subjectArea.style.display = 'none';
+            modeArea.style.display = 'none';
+            if (searchArea) searchArea.style.display = 'none';
+            if (dashboardArea) dashboardArea.style.display = 'none';
+            if (weeklyProgressArea) weeklyProgressArea.style.display = 'none';
+            if (studentFlashcardArea) studentFlashcardArea.style.display = 'none';
+            document.getElementById('student-task-list').innerHTML = '';
+            
             if (currentType === "首頁") {
-                // 🌟 點擊首頁：同時顯示「作業待辦(Dashboard)」與「本週進度」
                 sectionTitle.innerText = `👋 歡迎回來，${currentLoggedInStudent}！`;
                 sectionDesc.innerText = "以下是你的最新學習動態與本週專屬任務：";
-                
-                subjectArea.style.display = 'none';
-                modeArea.style.display = 'none';
-                if (searchArea) searchArea.style.display = 'none';
-                document.getElementById('student-task-list').innerHTML = '';
-                
-                if (dashboardArea) {
-                    dashboardArea.style.display = 'block';
-                    if (typeof loadStudentDashboard === "function") loadStudentDashboard();
-                }
-                if (weeklyProgressArea) {
-                    weeklyProgressArea.style.display = 'block';
-                    if (typeof loadWeeklyProgress === "function") loadWeeklyProgress();
-                }
+                if (dashboardArea) { dashboardArea.style.display = 'block'; loadStudentDashboard(); }
+                if (weeklyProgressArea) { weeklyProgressArea.style.display = 'block'; loadWeeklyProgress(); }
                 
             } else if (currentType === "本週進度") {
-                // 🌟 點擊本週進度：只顯示進度表 (隱藏上面的待辦作業)
                 sectionTitle.innerText = "📅 本週進度";
                 sectionDesc.innerText = "以下是你本週的專屬學習目標，請依照進度確實完成喔！";
+                if (weeklyProgressArea) { weeklyProgressArea.style.display = 'block'; loadWeeklyProgress(); }
                 
-                subjectArea.style.display = 'none';
-                modeArea.style.display = 'none';
-                if (searchArea) searchArea.style.display = 'none';
-                if (dashboardArea) dashboardArea.style.display = 'none';
-                document.getElementById('student-task-list').innerHTML = '';
-                
-                if (weeklyProgressArea) {
-                    weeklyProgressArea.style.display = 'block';
-                    if (typeof loadWeeklyProgress === "function") loadWeeklyProgress();
+            } else if (currentType === "閃字卡") {
+                sectionTitle.innerText = "📇 閃字卡診斷";
+                sectionDesc.innerText = "透過字卡檢測自己的熟悉度，老師會依此幫你製作專屬講義喔！";
+                if (studentFlashcardArea) {
+                    studentFlashcardArea.style.display = 'block';
+                    flashcardSelectionArea.style.display = 'block';
+                    flashcardTestArea.style.display = 'none';
+                    if (typeof loadStudentFlashcardDecks === "function") loadStudentFlashcardDecks();
                 }
-                
             } else {
-                // 🌟 點擊講義或練習題：顯示科目選擇按鈕
                 sectionTitle.innerText = currentType === "講義" ? "📖 講義區" : "✏️ 練習題區";
                 sectionDesc.innerText = "請選擇科目：";
-                
                 subjectArea.style.display = 'block';
-                modeArea.style.display = 'none'; 
-                
-                if (weeklyProgressArea) weeklyProgressArea.style.display = 'none'; 
-                if (dashboardArea) dashboardArea.style.display = 'none';
-                if (searchArea) searchArea.style.display = 'none';
-                
                 document.querySelectorAll('.subject-btn, .mode-btn').forEach(btn => btn.classList.remove('selected'));
-                document.getElementById('student-task-list').innerHTML = '';
             }
         }
         sidebar.classList.remove('active'); 
     });
 });
+
+
 // ==========================================
 // 6. 老師端專屬功能
 // ==========================================
@@ -296,12 +325,17 @@ document.querySelectorAll('.admin-subject-btn').forEach(btn => {
         adminUploadArea.style.display = 'block';
         adminUploadTitle.innerText = `發布【${currentSubject}】${currentType}`;
         
+        uploadPdfSection.style.display = 'none';
+        uploadImgSection.style.display = 'none';
+        const quizSection = document.getElementById('upload-quiz-section');
+        if(quizSection) quizSection.style.display = 'none';
+
         if (currentType === "講義") {
             uploadPdfSection.style.display = 'block';
-            uploadImgSection.style.display = 'none';
-        } else {
-            uploadPdfSection.style.display = 'none';
+        } else if (currentType === "練習題") {
             uploadImgSection.style.display = 'block';
+        } else if (currentType === "線上測驗") {
+            if(quizSection) quizSection.style.display = 'block';
         }
         loadAdminHistory();
     });
@@ -427,6 +461,59 @@ publishPdfBtn.addEventListener('click', async () => {
         publishPdfBtn.disabled = false;
     }
 });
+
+// 6-6.5 發布線上測驗
+const publishQuizBtn = document.getElementById('publish-quiz-btn');
+if (publishQuizBtn) {
+    publishQuizBtn.addEventListener('click', async () => {
+        const title = document.getElementById('quiz-title').value;
+        const timeLimit = document.getElementById('quiz-time-limit').value;
+        const file = document.getElementById('quiz-file').files[0];
+
+        if (!title || !timeLimit || !file || selectedStudents.length === 0) {
+            alert("請完整輸入標題、測驗時間、選擇 PDF，並勾選學生！");
+            return;
+        }
+
+        try {
+            publishQuizBtn.innerText = "上傳並發布中...";
+            publishQuizBtn.disabled = true;
+
+            const uploadResult = await uploadFileToCloudinary(file);
+
+            // 每位學生派發獨立的測驗副本
+            const addPromises = selectedStudents.map(studentName => {
+                return addDoc(collection(db, "tasks"), {
+                    students: [studentName],
+                    subject: currentSubject,
+                    type: "線上測驗",
+                    mode: adminModeSelect.value,
+                    title: title,
+                    timeLimit: parseInt(timeLimit),
+                    fileUrl: uploadResult.url, 
+                    status: "未完成",
+                    studentReplyUrls: [],           
+                    teacherFeedbackUrls: [],        
+                    timestamp: serverTimestamp()
+                });
+            });
+
+            await Promise.all(addPromises);
+            alert(`🎉 線上測驗已成功發布給：${selectedStudents.join('、')}！`);
+            
+            document.getElementById('quiz-title').value = "";
+            document.getElementById('quiz-time-limit').value = "";
+            document.getElementById('quiz-file').value = "";
+            loadAdminHistory();
+        } catch (error) {
+            console.error(error);
+            alert("發布失敗，請檢查網路。");
+        } finally {
+            publishQuizBtn.innerText = "發布線上測驗";
+            publishQuizBtn.disabled = false;
+        }
+    });
+}
 
 // ==========================================
 // 6-7. 發布題目 (圖片) - 2.5 陣列共享完整升級版
@@ -558,12 +645,12 @@ async function loadAdminHistory() {
                     <p style="font-size: 10px; color: #bdc3c7; margin-bottom: 5px;">雲端 ID: ${task.cloudinaryId || '無'}</p>
                     <a href="${task.fileUrl}" target="_blank" class="primary-btn" style="display:inline-block; text-decoration:none; background-color:#3498db; padding: 8px 15px; width:auto;">🔍 查看已發布講義</a>
                 `;
-            } else if (task.type === "練習題") {
+            } else if (task.type === "練習題" || task.type === "線上測驗") { // 🌟 加上線上測驗，讓它共用批改介面
                 const cloudIdsDisplay = task.cloudinaryIds ? task.cloudinaryIds.join(', ') : (task.cloudinaryId || '無');
                 htmlContent += `
                     <p style="font-size: 10px; color: #bdc3c7; margin-bottom: 5px; word-break: break-all;">雲端 IDs: ${cloudIdsDisplay}</p>
                     <div style="margin-bottom: 10px;">
-                        <span style="color: #e67e22; font-weight: bold;">🔍 原題目圖片：</span>
+                        <span style="color: #e67e22; font-weight: bold;">🔍 原題目 / 測驗卷：</span>
                         
 ${generateGalleryHTML(task.fileUrls || task.fileUrl, '#e67e22', task.exercisePdfNames || [])}
                     </div>
@@ -931,7 +1018,57 @@ tasksData.forEach((task) => {
     }
     innerHTML += `</div></div></details>`;
     taskCard.innerHTML = innerHTML;
-}
+}else if (task.type === "線上測驗") {
+        const isCompleted = task.status === "已完成";
+        const hasFeedback = task.teacherFeedbackUrls?.length > 0 || !!task.teacherFeedbackUrl; 
+        
+        let statusColor = isCompleted ? (hasFeedback ? "#8e44ad" : "#27ae60") : "#c0392b";
+        let statusBadge = isCompleted 
+            ? (hasFeedback ? `<span style="background: #f4ecf7; color: #8e44ad; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-left: auto;">👩‍🏫 已批改</span>` : `<span style="background: #e8f8f5; color: #27ae60; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-left: auto;">✅ 已交卷</span>`)
+            : `<span style="background: #fadbd8; color: #c0392b; padding: 3px 8px; border-radius: 12px; font-size: 12px; margin-left: auto;">🚨 尚未測驗</span>`;
+
+        taskCard.style.borderLeft = `5px solid ${statusColor}`;
+        
+        let innerHTML = `
+            <details style="background: #fff; cursor: pointer; transition: all 0.3s ease;">
+                <summary class="task-summary" style="padding: 15px; font-size: 16px; font-weight: bold; color: #2c3e50; outline: none; user-select: none; display: flex; flex-wrap: wrap; align-items: center; gap: 10px;">
+                    ⏱️ ${task.title} (限時 ${task.timeLimit || 0} 分鐘) ${modeBadge}
+                    ${statusBadge}
+                </summary>
+                <div style="padding: 15px; border-top: 1px dashed #eee; cursor: auto; background: #fafbfc;">
+        `;
+
+        if (isCompleted) {
+            innerHTML += `
+                <details style="cursor: pointer; margin-bottom: 15px;">
+                    <summary style="color: #27ae60; font-weight: bold; outline: none; user-select: none;">✅ 已繳交的考卷 (點擊展開)</summary>
+                    <div style="margin-top: 12px;">
+                        ${generateGalleryHTML(task.studentReplyUrls || task.studentReplyUrl, '#27ae60', task.studentReplyPdfNames || [])}
+                    </div>
+                </details>
+            `;
+            if (hasFeedback) {
+                innerHTML += `
+                    <div style="background: #f4ecf7; border-left: 4px solid #8e44ad; padding: 10px; border-radius: 4px;">
+                        <details open style="cursor: pointer;">
+                            <summary style="color: #8e44ad; font-weight: bold; outline: none; user-select: none;">👩‍🏫 老師批改回饋</summary>
+                            <div style="margin-top: 12px;">${generateGalleryHTML(task.teacherFeedbackUrls || task.teacherFeedbackUrl, '#8e44ad', task.teacherFeedbackPdfNames || [])}</div>
+                        </details>
+                    </div>`;
+            }
+        } else {
+            // 尚未完成，顯示進入大廳按鈕
+            innerHTML += `
+                <div style="text-align: center; padding: 10px;">
+                    <p style="color: #e74c3c; font-weight: bold; font-size: 14px; margin-bottom: 15px;">⚠️ 請準備好手寫筆，進入測驗後即開始計時，中途不可離開畫面！</p>
+                    <button class="primary-btn enter-quiz-lobby-btn" data-id="${taskId}" data-title="${task.title}" data-time="${task.timeLimit}" data-url="${task.fileUrl}" style="background-color: #c0392b;">👉 進入測驗大廳</button>
+                </div>
+            `;
+        }
+        innerHTML += `</div></details>`;
+        taskCard.innerHTML = innerHTML;
+        }
+
                 studentTaskList.appendChild(taskCard);
             });
 
@@ -1392,5 +1529,572 @@ async function loadWeeklyProgress() {
     } catch (error) {
         console.error("抓取 CSV 失敗：", error);
         container.innerHTML = `<p style="color: #e74c3c; text-align: center;">讀取失敗，請確認 Google Sheets 是否已發布到網路。</p>`;
+    }
+}
+
+// ==========================================
+// 12. 閃字卡 (Flashcard) 核心邏輯區塊
+// ==========================================
+
+// --- [共用] 從 CSV 獲取並解析字卡 ---
+async function fetchFlashcardCSV() {
+    try {
+        const response = await fetch(FLASHCARD_CSV_URL);
+        if (!response.ok) throw new Error("字卡讀取失敗");
+        const csvText = await response.text();
+        
+        const rows = csvText.split('\n').map(row => {
+            const regex = /,(?=(?:(?:[^"]*"){2})*[^"]*$)/; 
+            return row.split(regex).map(e => e.replace(/^"|"$/g, "").trim());
+        });
+        
+        rows.shift(); // 移除標題列
+        allFlashcardDecks = {}; // 重置
+        
+        rows.forEach(task => {
+            if (task.length < 4) return;
+            const targetStudents = task[0]; // 開放學生
+            const deckTitle = task[1];      // 字卡組標題
+            const front = task[2];          // 正面內容
+            const back = task[3];           // 背面內容
+            
+            if (!allFlashcardDecks[deckTitle]) {
+                allFlashcardDecks[deckTitle] = {
+                    allowed: targetStudents,
+                    cards: []
+                };
+            }
+            allFlashcardDecks[deckTitle].cards.push({ front, back });
+        });
+        return true;
+    } catch (err) {
+        console.error(err);
+        return false;
+    }
+}
+
+// --- [學生端] 載入有權限的字卡組 ---
+async function loadStudentFlashcardDecks() {
+    flashcardDeckList.innerHTML = "<p style='color: #7f8c8d; text-align: center;'>🔄 讀取字卡組中...</p>";
+    const success = await fetchFlashcardCSV();
+    if (!success) {
+        flashcardDeckList.innerHTML = "<p style='color: #e74c3c;'>讀取失敗，請確認 Google Sheet 已發布。</p>";
+        return;
+    }
+    
+    let html = "";
+    Object.keys(allFlashcardDecks).forEach(title => {
+        const allowed = allFlashcardDecks[title].allowed;
+        // 檢查權限：如果包含全體、或是包含該學生的名字
+        if (allowed.includes("全體") || allowed.includes(currentLoggedInStudent)) {
+            html += `<button class="grid-btn student-start-fc-btn" data-title="${title}">📇 ${title}</button>`;
+        }
+    });
+    
+    if (html === "") html = "<p style='color: #27ae60; font-weight: bold;'>目前沒有指派給你的字卡測驗喔！</p>";
+    flashcardDeckList.innerHTML = html;
+    
+    // 綁定點擊開始測驗
+    document.querySelectorAll('.student-start-fc-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const title = e.target.getAttribute('data-title');
+            startFlashcardTest(title);
+        });
+    });
+}
+
+// --- [學生端] 開始測驗 ---
+function startFlashcardTest(title) {
+    currentDeckTitle = title;
+    currentFlashcardDeck = allFlashcardDecks[title].cards;
+    currentFlashcardIndex = 0;
+    flashcardTestResults = {}; // 清空之前的作答紀錄
+    
+    currentFlashcardTitle.innerText = `📇 ${title}`;
+    flashcardSelectionArea.style.display = 'none';
+    flashcardTestArea.style.display = 'block';
+    
+    renderCurrentFlashcard();
+}
+
+// --- [學生端] 渲染單張字卡畫面 ---
+function renderCurrentFlashcard() {
+    const card = currentFlashcardDeck[currentFlashcardIndex];
+    flashcardFrontText.innerText = card.front;
+    flashcardBackText.innerText = card.back;
+    flashcardInner.classList.remove('is-flipped'); // 預設翻回正面
+    
+    flashcardProgress.innerText = `${currentFlashcardIndex + 1} / ${currentFlashcardDeck.length}`;
+    
+    // 恢復按鈕狀態
+    document.querySelectorAll('.fc-status-btn').forEach(b => b.classList.remove('selected'));
+    if (flashcardTestResults[card.front]) {
+        const savedStatus = flashcardTestResults[card.front];
+        document.querySelector(`.fc-status-btn[data-status="${savedStatus}"]`).classList.add('selected');
+    }
+    
+    // 檢查上下頁按鈕
+    document.getElementById('fc-prev-btn').disabled = (currentFlashcardIndex === 0);
+    const isLastCard = (currentFlashcardIndex === currentFlashcardDeck.length - 1);
+    
+    if (isLastCard) {
+        document.getElementById('fc-next-btn').style.display = 'none';
+        document.getElementById('fc-finish-btn').style.display = 'block';
+    } else {
+        document.getElementById('fc-next-btn').style.display = 'block';
+        document.getElementById('fc-finish-btn').style.display = 'none';
+    }
+}
+
+// --- [學生端] 點擊翻轉 ---
+flashcardContainer.addEventListener('click', () => {
+    flashcardInner.classList.toggle('is-flipped');
+});
+
+// --- [學生端] 狀態紀錄 (三色按鈕) ---
+document.querySelectorAll('.fc-status-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        // 防止事件冒泡點到卡片翻轉
+        e.stopPropagation(); 
+        const status = e.target.getAttribute('data-status');
+        const currentFrontText = currentFlashcardDeck[currentFlashcardIndex].front;
+        
+        // 儲存狀態
+        flashcardTestResults[currentFrontText] = status;
+        
+        // 切換高亮
+        document.querySelectorAll('.fc-status-btn').forEach(b => b.classList.remove('selected'));
+        e.target.classList.add('selected');
+    });
+});
+
+// --- [學生端] 上下張邏輯 ---
+document.getElementById('fc-prev-btn').addEventListener('click', () => {
+    if (currentFlashcardIndex > 0) {
+        currentFlashcardIndex--;
+        renderCurrentFlashcard();
+    }
+});
+document.getElementById('fc-next-btn').addEventListener('click', () => {
+    if (currentFlashcardIndex < currentFlashcardDeck.length - 1) {
+        currentFlashcardIndex++;
+        renderCurrentFlashcard();
+    }
+});
+// ➕ 支援鍵盤左右鍵翻頁
+document.addEventListener('keydown', (e) => {
+    if (flashcardTestArea && flashcardTestArea.style.display === 'block') {
+        if (e.key === "ArrowLeft" && currentFlashcardIndex > 0) {
+            document.getElementById('fc-prev-btn').click();
+        } else if (e.key === "ArrowRight" && currentFlashcardIndex < currentFlashcardDeck.length - 1) {
+            document.getElementById('fc-next-btn').click();
+        } else if (e.key === " " || e.key === "ArrowUp" || e.key === "ArrowDown") {
+            e.preventDefault(); // 防止畫面捲動
+            flashcardInner.classList.toggle('is-flipped');
+        }
+    }
+});
+
+// --- [學生端] 中斷返回 ---
+document.getElementById('fc-exit-btn').addEventListener('click', () => {
+    if(confirm("確定要中斷測驗嗎？紀錄將不會被儲存喔！")) {
+        flashcardTestArea.style.display = 'none';
+        flashcardSelectionArea.style.display = 'block';
+    }
+});
+
+// --- [學生端] 完成測驗並上傳 ---
+document.getElementById('fc-finish-btn').addEventListener('click', async (e) => {
+    // 檢查是否每題都回答了
+    if (Object.keys(flashcardTestResults).length < currentFlashcardDeck.length) {
+        if (!confirm("還有字卡尚未標記狀態喔！確定要提早上傳紀錄嗎？")) return;
+    }
+    
+    try {
+        e.target.innerText = "儲存中...";
+        e.target.disabled = true;
+        
+        // 寫入 Firebase (使用姓名_字卡標題為 ID，自動覆蓋舊紀錄)
+        const docId = `${currentLoggedInStudent}_${currentDeckTitle}`;
+        await setDoc(doc(db, "flashcard_records", docId), {
+            student: currentLoggedInStudent,
+            deckTitle: currentDeckTitle,
+            results: flashcardTestResults,
+            lastUpdated: serverTimestamp()
+        });
+        
+        alert("🎉 診斷紀錄已儲存！老師會根據你的狀態幫你製作專屬講義！");
+        flashcardTestArea.style.display = 'none';
+        flashcardSelectionArea.style.display = 'block';
+        
+    } catch (err) {
+        console.error(err);
+        alert("上傳失敗，請檢查網路。");
+    } finally {
+        e.target.innerText = "💾 完成測驗！上傳診斷紀錄給老師";
+        e.target.disabled = false;
+    }
+});
+
+// --- [老師端] 載入下拉選單 ---
+async function loadAdminFlashcardDropdown() {
+    await fetchFlashcardCSV();
+    adminFlashcardSelect.innerHTML = '<option value="">請選擇要查看的字卡組...</option>';
+    Object.keys(allFlashcardDecks).forEach(title => {
+        adminFlashcardSelect.innerHTML += `<option value="${title}">${title}</option>`;
+    });
+}
+
+// --- [老師端] 查看診斷報告 ---
+adminFlashcardSelect.addEventListener('change', async (e) => {
+    const deckTitle = e.target.value;
+    if (!deckTitle) {
+        adminFlashcardReportContent.innerHTML = "<p style='color: #7f8c8d; text-align: center;'>請先從上方選擇字卡組以載入學生的診斷紀錄。</p>";
+        return;
+    }
+    
+    adminFlashcardReportContent.innerHTML = "<p style='color: #7f8c8d; text-align: center;'>🔄 正在從雲端讀取報告...</p>";
+    
+    try {
+        const docId = `${adminSelectedStudent}_${deckTitle}`;
+        const recordDoc = await getDoc(doc(db, "flashcard_records", docId));
+        
+        if (!recordDoc.exists()) {
+            adminFlashcardReportContent.innerHTML = `<p style="color: #e74c3c; font-weight: bold;">🧑‍🎓 ${adminSelectedStudent} 尚未完成【${deckTitle}】的測驗。</p>`;
+            return;
+        }
+        
+        const data = recordDoc.data();
+        const results = data.results;
+        
+        let goodArr = [], fairArr = [], poorArr = [];
+        for (let word in results) {
+            if (results[word] === "精熟") goodArr.push(word);
+            else if (results[word] === "不熟") fairArr.push(word);
+            else if (results[word] === "完全不會") poorArr.push(word);
+        }
+        
+        const formatList = (arr) => arr.length > 0 ? arr.map(w => `<li>${w}</li>`).join('') : '<li style="color:#bdc3c7;">無</li>';
+        const timeStr = data.lastUpdated ? new Date(data.lastUpdated.toMillis()).toLocaleString() : "未知";
+        
+        // 渲染報告 (特別凸顯不熟與不會的項目，方便老師複製)
+        let html = `
+            <div style="margin-bottom: 20px; border-bottom: 1px dashed #ccc; padding-bottom: 10px;">
+                <h3 style="margin: 0; color: #2c3e50;">🧑‍🎓 ${adminSelectedStudent} 的診斷結果</h3>
+                <p style="font-size: 13px; color: #7f8c8d; margin-top: 5px;">最後測驗時間：${timeStr}</p>
+            </div>
+            
+            <div class="fc-report-group" style="border-left-color: #c0392b; background: #fdf2e9;">
+                <h4 style="color: #c0392b;">🔴 完全不會 (${poorArr.length})</h4>
+                <ul>${formatList(poorArr)}</ul>
+            </div>
+            
+            <div class="fc-report-group" style="border-left-color: #f39c12; background: #fcf3cf;">
+                <h4 style="color: #f39c12;">🟡 不熟 (${fairArr.length})</h4>
+                <ul>${formatList(fairArr)}</ul>
+            </div>
+            
+            <details style="background: #e8f8f5; border-left: 5px solid #27ae60; padding: 10px 15px; border-radius: 8px; cursor: pointer;">
+                <summary style="color: #27ae60; font-weight: bold; outline: none; user-select: none;">
+                    🟢 精熟 (${goodArr.length}) - 點擊展開
+                </summary>
+                <ul style="margin-top: 10px;">${formatList(goodArr)}</ul>
+            </details>
+        `;
+        
+        adminFlashcardReportContent.innerHTML = html;
+        
+    } catch (err) {
+        console.error(err);
+        adminFlashcardReportContent.innerHTML = "<p style='color: #e74c3c;'>讀取失敗，請檢查網路連線。</p>";
+    }
+});
+
+// ==========================================
+// 13. 線上測驗 (畫布作答與防弊引擎) 核心區塊
+// ==========================================
+
+let activeQuizId = null;
+let quizTimerInterval = null;
+let quizTimeRemaining = 0;
+let isQuizActive = false;
+
+const studentQuizArea = document.getElementById('student-quiz-area');
+const quizListArea = document.getElementById('quiz-list-area');
+const quizLobbyArea = document.getElementById('quiz-lobby-area');
+const quizActiveArea = document.getElementById('quiz-active-area');
+const pdfCanvas = document.getElementById('pdf-render-canvas');
+const drawCanvas = document.getElementById('drawing-canvas');
+const pdfCtx = pdfCanvas ? pdfCanvas.getContext('2d') : null;
+const drawCtx = drawCanvas ? drawCanvas.getContext('2d') : null;
+
+// --- 綁定：點擊「進入測驗大廳」 ---
+document.body.addEventListener('click', (e) => {
+    if (e.target.classList.contains('enter-quiz-lobby-btn')) {
+        const taskId = e.target.getAttribute('data-id');
+        const title = e.target.getAttribute('data-title');
+        const timeLimit = e.target.getAttribute('data-time');
+        const pdfUrl = e.target.getAttribute('data-url');
+        
+        document.getElementById('lobby-quiz-title').innerText = title;
+        document.getElementById('lobby-quiz-time').innerText = timeLimit;
+        
+        // 將資訊暫存到開始按鈕上
+        const startBtn = document.getElementById('lobby-start-btn');
+        startBtn.setAttribute('data-id', taskId);
+        startBtn.setAttribute('data-time', timeLimit);
+        startBtn.setAttribute('data-url', pdfUrl);
+
+        // UI 切換
+        if(document.getElementById('student-task-list')) document.getElementById('student-task-list').style.display = 'none';
+        document.getElementById('mode-area').style.display = 'none';
+        document.getElementById('subject-area').style.display = 'none';
+        
+        studentQuizArea.style.display = 'block';
+        quizLobbyArea.style.display = 'block';
+        quizActiveArea.style.display = 'none';
+    }
+});
+
+// --- 大廳：取消返回 ---
+document.getElementById('lobby-cancel-btn')?.addEventListener('click', () => {
+    quizLobbyArea.style.display = 'none';
+    studentQuizArea.style.display = 'none';
+    document.getElementById('subject-area').style.display = 'block';
+    document.getElementById('mode-area').style.display = 'block';
+    document.getElementById('student-task-list').style.display = 'block';
+});
+
+// --- 大廳：正式開始測驗 ---
+document.getElementById('lobby-start-btn')?.addEventListener('click', async (e) => {
+    const taskId = e.target.getAttribute('data-id');
+    const timeLimit = parseInt(e.target.getAttribute('data-time'));
+    const pdfUrl = e.target.getAttribute('data-url');
+
+    activeQuizId = taskId;
+    quizTimeRemaining = timeLimit * 60; // 轉換為秒
+    isQuizActive = true;
+
+    quizLobbyArea.style.display = 'none';
+    quizActiveArea.style.display = 'block';
+    
+    // 初始化計時器與畫布
+    updateTimerDisplay();
+    startQuizTimer();
+    await initQuizCanvas(pdfUrl);
+});
+
+// --- 計時器與警告 ---
+function updateTimerDisplay() {
+    const timerDiv = document.getElementById('quiz-timer');
+    const m = Math.floor(quizTimeRemaining / 60);
+    const s = quizTimeRemaining % 60;
+    timerDiv.innerText = `${m}:${s.toString().padStart(2, '0')}`;
+    
+    // 剩下一分鐘，觸發紅色脈衝呼吸燈
+    if (quizTimeRemaining <= 60 && quizTimeRemaining > 0) {
+        timerDiv.classList.add('warning');
+    } else {
+        timerDiv.classList.remove('warning');
+    }
+}
+
+function startQuizTimer() {
+    clearInterval(quizTimerInterval);
+    quizTimerInterval = setInterval(() => {
+        quizTimeRemaining--;
+        updateTimerDisplay();
+        
+        if (quizTimeRemaining <= 0) {
+            clearInterval(quizTimerInterval);
+            forceSubmitQuiz("時間到！系統已自動收卷。");
+        }
+    }, 1000);
+}
+
+// --- 防弊機制：切換分頁或離開視窗 ---
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden && isQuizActive) {
+        forceSubmitQuiz("🚨 警告：系統偵測到您切換分頁或離開畫面，已依規定強制收卷！");
+    }
+});
+window.addEventListener("blur", () => {
+    if (isQuizActive) {
+        forceSubmitQuiz("🚨 警告：系統偵測到您切換分頁或離開畫面，已依規定強制收卷！");
+    }
+});
+
+// --- 畫布初始化與 PDF 渲染 ---
+async function initQuizCanvas(pdfUrl) {
+    const loadingText = document.getElementById('quiz-loading-text');
+    loadingText.style.display = 'block';
+    
+    try {
+        const loadingTask = pdfjsLib.getDocument(pdfUrl);
+        const pdf = await loadingTask.promise;
+        const page = await pdf.getPage(1); // 假設考卷為單頁長圖/PDF
+        
+        // 計算縮放比例適應螢幕
+        const wrapperWidth = document.getElementById('quiz-canvas-wrapper').clientWidth;
+        const unscaledViewport = page.getViewport({ scale: 1 });
+        const scale = wrapperWidth / unscaledViewport.width;
+        const viewport = page.getViewport({ scale: scale });
+
+        pdfCanvas.width = viewport.width;
+        pdfCanvas.height = viewport.height;
+        drawCanvas.width = viewport.width;
+        drawCanvas.height = viewport.height;
+        
+        // 調整容器高度
+        document.getElementById('quiz-canvas-wrapper').style.height = `${viewport.height}px`;
+
+        const renderContext = { canvasContext: pdfCtx, viewport: viewport };
+        await page.render(renderContext).promise;
+        
+        // 初始化畫筆狀態
+        setupDrawingEvents();
+        loadingText.style.display = 'none';
+
+    } catch (err) {
+        console.error("PDF載入失敗", err);
+        loadingText.innerText = "考卷載入失敗，請通知老師。";
+    }
+}
+
+// --- 手寫畫布邏輯 ---
+let isDrawing = false;
+let currentPenColor = "#000000";
+let currentToolMode = "pen"; // "pen" or "eraser"
+
+// 工具列切換
+document.querySelectorAll('.quiz-tool-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        document.querySelectorAll('.quiz-tool-btn').forEach(b => b.classList.remove('active'));
+        e.target.classList.add('active');
+        
+        const tool = e.target.getAttribute('data-tool');
+        if (tool === "pen") {
+            currentToolMode = "pen";
+            currentPenColor = e.target.getAttribute('data-color');
+        } else {
+            currentToolMode = "eraser";
+        }
+    });
+});
+
+function getDrawPos(e) {
+    const rect = drawCanvas.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    return {
+        x: (clientX - rect.left) * (drawCanvas.width / rect.width),
+        y: (clientY - rect.top) * (drawCanvas.height / rect.height)
+    };
+}
+
+function startDrawing(e) {
+    e.preventDefault(); // 阻止螢幕滑動
+    isDrawing = true;
+    const pos = getDrawPos(e);
+    drawCtx.beginPath();
+    drawCtx.moveTo(pos.x, pos.y);
+    
+    if (currentToolMode === "eraser") {
+        drawCtx.globalCompositeOperation = "destination-out";
+        drawCtx.lineWidth = 20; // 橡皮擦粗細
+    } else {
+        drawCtx.globalCompositeOperation = "source-over";
+        drawCtx.strokeStyle = currentPenColor;
+        drawCtx.lineWidth = 2; // 筆寬
+        drawCtx.lineCap = "round";
+        drawCtx.lineJoin = "round";
+    }
+}
+
+function draw(e) {
+    if (!isDrawing) return;
+    e.preventDefault();
+    const pos = getDrawPos(e);
+    drawCtx.lineTo(pos.x, pos.y);
+    drawCtx.stroke();
+}
+
+function stopDrawing() {
+    isDrawing = false;
+    drawCtx.closePath();
+}
+
+function setupDrawingEvents() {
+    // 支援滑鼠與觸控
+    drawCanvas.addEventListener('mousedown', startDrawing);
+    drawCanvas.addEventListener('mousemove', draw);
+    drawCanvas.addEventListener('mouseup', stopDrawing);
+    drawCanvas.addEventListener('mouseout', stopDrawing);
+    
+    drawCanvas.addEventListener('touchstart', startDrawing, { passive: false });
+    drawCanvas.addEventListener('touchmove', draw, { passive: false });
+    drawCanvas.addEventListener('touchend', stopDrawing);
+}
+
+// --- 交卷處理邏輯 (結合畫布) ---
+document.getElementById('quiz-submit-early-btn')?.addEventListener('click', () => {
+    if(confirm("確定要提前交卷嗎？交卷後無法修改！")) {
+        forceSubmitQuiz("🎉 交卷成功！");
+    }
+});
+
+async function forceSubmitQuiz(alertMessage) {
+    if (!isQuizActive) return;
+    isQuizActive = false; // 關閉防弊與狀態
+    clearInterval(quizTimerInterval);
+    
+    document.getElementById('quiz-timer').innerText = "上傳中...";
+    document.querySelectorAll('.quiz-tool-btn').forEach(b => b.disabled = true);
+    
+    try {
+        // 1. 建立一個暫存畫布來合併 PDF 底層與手寫表層
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = pdfCanvas.width;
+        tempCanvas.height = pdfCanvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        // 畫上白色背景 (防止透明背景變黑)
+        tempCtx.fillStyle = "#ffffff";
+        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        
+        // 疊加 PDF 與 手寫軌跡
+        tempCtx.drawImage(pdfCanvas, 0, 0);
+        tempCtx.drawImage(drawCanvas, 0, 0);
+        
+        // 2. 轉換成 Blob 檔案
+        const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/jpeg', 0.8));
+        const file = new File([blob], `quiz_submit_${activeQuizId}.jpg`, { type: "image/jpeg" });
+        
+        // 3. 上傳至 Cloudinary (呼叫你原本的函式)
+        const uploadResult = await uploadFileToCloudinary(file);
+        
+        // 4. 更新 Firebase 資料庫狀態
+        await updateDoc(doc(db, "tasks", activeQuizId), {
+            status: "已完成",
+            studentReplyUrls: [uploadResult.url], 
+            studentReplyPdfNames: ["系統自動合成作答卷"], 
+            replyTimestamp: serverTimestamp()
+        });
+
+        alert(alertMessage);
+        
+        // 結束後返回並重整模式選單
+        quizActiveArea.style.display = 'none';
+        studentQuizArea.style.display = 'none';
+        document.getElementById('subject-area').style.display = 'block';
+        document.getElementById('mode-area').style.display = 'block';
+        document.getElementById('student-task-list').style.display = 'block';
+        
+        const selectedModeBtn = document.querySelector('.mode-btn.selected');
+        if (selectedModeBtn) selectedModeBtn.click();
+        
+    } catch (err) {
+        console.error("交卷失敗：", err);
+        alert("上傳交卷失敗，請截圖作答畫面聯絡老師！");
     }
 }
