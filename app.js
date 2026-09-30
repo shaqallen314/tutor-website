@@ -24,7 +24,7 @@ const db = getFirestore(app);
 
 const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/djyt6fh9g/auto/upload";
 const CLOUDINARY_UPLOAD_PRESET = "zazj8sfj";
-const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6t2vxIxr_m29Wum0RgkCs_6iFAQu_n0sfY2npD7fCDuNv-ctppPtL1sE_6IWoOItzeAVK_03oU4IN/pub?output=csv";
+const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ6t2vxIxr_m29Wum0RgkCs_6iFAQu_n0sfY2npD7fCDuNv-ctppPtL1sE_6IWoOItzeAVK_03oU4IN/pub?gid=0&single=true&output=csv";
 
 
 
