@@ -2000,10 +2000,23 @@ function getDrawPos(e) {
 }
 
 function setupNativeDrawingEvents() {
-    // 🌟 iPad 完美防誤觸核心邏輯 (Pointer Events)
+    const scrollContainer = document.getElementById('quiz-scroll-container');
+    let isPanning = false;
+    let lastPanX = 0;
+    let lastPanY = 0;
+
+    // 🌟 核心解法：利用 Pointer Event 自行接管所有操作
     drawCanvas.addEventListener('pointerdown', (e) => {
-        if (e.pointerType === 'touch') return; // 如果是手指，什麼都不做
+        if (e.pointerType === 'touch') {
+            // 偵測到手指：啟動 JS 模擬拖曳引擎
+            isPanning = true;
+            lastPanX = e.clientX;
+            lastPanY = e.clientY;
+            drawCanvas.setPointerCapture(e.pointerId);
+            return;
+        }
         
+        // 偵測到手寫筆或滑鼠：啟動繪圖
         e.preventDefault(); 
         drawCanvas.setPointerCapture(e.pointerId);
         isDrawing = true;
@@ -2014,7 +2027,20 @@ function setupNativeDrawingEvents() {
     });
 
     drawCanvas.addEventListener('pointermove', (e) => {
-        if (!isDrawing || e.pointerType === 'touch') return; 
+        if (e.pointerType === 'touch') {
+            // 手指拖曳：手動修改外層容器的捲軸位置 (完美避開 Safari 判定)
+            if (!isPanning) return;
+            const dx = e.clientX - lastPanX;
+            const dy = e.clientY - lastPanY;
+            scrollContainer.scrollLeft -= dx;
+            scrollContainer.scrollTop -= dy;
+            lastPanX = e.clientX;
+            lastPanY = e.clientY;
+            return;
+        }
+
+        // 手寫筆或滑鼠：連續畫線
+        if (!isDrawing) return;
         
         e.preventDefault(); 
         const pos = getDrawPos(e);
@@ -2039,28 +2065,17 @@ function setupNativeDrawingEvents() {
         lastY = pos.y;
     });
 
-    const stopDrawing = (e) => {
-        if (e.pointerType === 'touch') return;
+    const stopInteraction = (e) => {
+        if (e.pointerType === 'touch') {
+            isPanning = false;
+            return;
+        }
         isDrawing = false;
     };
 
-    drawCanvas.addEventListener('pointerup', stopDrawing);
-    drawCanvas.addEventListener('pointerout', stopDrawing);
-    drawCanvas.addEventListener('pointercancel', stopDrawing);
-
-    // 🌟 iPad Safari 專屬防滑動補丁 (Touch Events)
-    // 專門攔截 Apple Pencil，強制沒收它的滑動畫布權限
-    drawCanvas.addEventListener('touchstart', (e) => {
-        if (e.touches && e.touches[0] && e.touches[0].touchType === 'stylus') {
-            e.preventDefault(); 
-        }
-    }, { passive: false });
-
-    drawCanvas.addEventListener('touchmove', (e) => {
-        if (e.touches && e.touches[0] && e.touches[0].touchType === 'stylus') {
-            e.preventDefault();
-        }
-    }, { passive: false });
+    drawCanvas.addEventListener('pointerup', stopInteraction);
+    drawCanvas.addEventListener('pointerout', stopInteraction);
+    drawCanvas.addEventListener('pointercancel', stopInteraction);
 }
 
 // --- 交卷處理邏輯 (結合雙層畫布) ---

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>學測數理專屬家教網</title>
-    <link rel="stylesheet" href="style.css?v=1.1">
+    <link rel="stylesheet" href="style.css?v=2.0">
     <link rel="icon" type="image/png" href="./favicon.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
@@ -280,7 +280,7 @@
                                 <!-- 底層 PDF 畫布 -->
                                 <canvas id="pdf-render-canvas" style="position: absolute; top: 0; left: 0; z-index: 1;"></canvas>
                                 <!-- 表層手寫畫布 (重點：加入 touch-action 讓瀏覽器接管手指滑動) -->
-                                <canvas id="drawing-canvas" style="position: absolute; top: 0; left: 0; z-index: 2; touch-action: pan-x pan-y;"></canvas>
+                                <canvas id="drawing-canvas" style="position: absolute; top: 0; left: 0; z-index: 2; touch-action: none;"></canvas>
                             </div>
                         </div>
                     
