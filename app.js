@@ -1811,22 +1811,19 @@ adminFlashcardSelect.addEventListener('change', async (e) => {
 });
 
 // ==========================================
-// 13. 線上測驗 (畫布作答與防弊引擎) 核心區塊
+// 13. 線上測驗 (Fabric.js 向量畫布與防弊引擎) 核心區塊
 // ==========================================
 
 let activeQuizId = null;
 let quizTimerInterval = null;
 let quizTimeRemaining = 0;
 let isQuizActive = false;
+let fbCanvas = null; // Fabric 畫布實例
+let currentToolMode = "pen"; 
 
 const studentQuizArea = document.getElementById('student-quiz-area');
-const quizListArea = document.getElementById('quiz-list-area');
 const quizLobbyArea = document.getElementById('quiz-lobby-area');
 const quizActiveArea = document.getElementById('quiz-active-area');
-const pdfCanvas = document.getElementById('pdf-render-canvas');
-const drawCanvas = document.getElementById('drawing-canvas');
-const pdfCtx = pdfCanvas ? pdfCanvas.getContext('2d') : null;
-const drawCtx = drawCanvas ? drawCanvas.getContext('2d') : null;
 
 // --- 綁定：點擊「進入測驗大廳」 ---
 document.body.addEventListener('click', (e) => {
@@ -1839,13 +1836,11 @@ document.body.addEventListener('click', (e) => {
         document.getElementById('lobby-quiz-title').innerText = title;
         document.getElementById('lobby-quiz-time').innerText = timeLimit;
         
-        // 將資訊暫存到開始按鈕上
         const startBtn = document.getElementById('lobby-start-btn');
         startBtn.setAttribute('data-id', taskId);
         startBtn.setAttribute('data-time', timeLimit);
         startBtn.setAttribute('data-url', pdfUrl);
 
-        // UI 切換
         if(document.getElementById('student-task-list')) document.getElementById('student-task-list').style.display = 'none';
         document.getElementById('mode-area').style.display = 'none';
         document.getElementById('subject-area').style.display = 'none';
@@ -1872,31 +1867,32 @@ document.getElementById('lobby-start-btn')?.addEventListener('click', async (e) 
     const pdfUrl = e.target.getAttribute('data-url');
 
     activeQuizId = taskId;
-    quizTimeRemaining = timeLimit * 60; // 轉換為秒
+    quizTimeRemaining = timeLimit * 60; 
     isQuizActive = true;
 
     quizLobbyArea.style.display = 'none';
     quizActiveArea.style.display = 'block';
     
-    // 初始化計時器與畫布
+    // 初始化 UI 與重置縮放
+    applyZoom(1);
+    document.querySelectorAll('.quiz-tool-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('.quiz-tool-btn[data-color="#000000"]').classList.add('active');
+    currentToolMode = "pen";
+
     updateTimerDisplay();
     startQuizTimer();
-    await initQuizCanvas(pdfUrl);
+    await initFabricCanvas(pdfUrl);
 });
 
-// --- 計時器與警告 ---
+// --- 計時器與防弊機制 ---
 function updateTimerDisplay() {
     const timerDiv = document.getElementById('quiz-timer');
     const m = Math.floor(quizTimeRemaining / 60);
     const s = quizTimeRemaining % 60;
     timerDiv.innerText = `${m}:${s.toString().padStart(2, '0')}`;
     
-    // 剩下一分鐘，觸發紅色脈衝呼吸燈
-    if (quizTimeRemaining <= 60 && quizTimeRemaining > 0) {
-        timerDiv.classList.add('warning');
-    } else {
-        timerDiv.classList.remove('warning');
-    }
+    if (quizTimeRemaining <= 60 && quizTimeRemaining > 0) timerDiv.classList.add('warning');
+    else timerDiv.classList.remove('warning');
 }
 
 function startQuizTimer() {
@@ -1912,47 +1908,74 @@ function startQuizTimer() {
     }, 1000);
 }
 
-// --- 防弊機制：切換分頁或離開視窗 ---
 document.addEventListener("visibilitychange", () => {
-    if (document.hidden && isQuizActive) {
-        forceSubmitQuiz("🚨 警告：系統偵測到您切換分頁或離開畫面，已依規定強制收卷！");
-    }
+    if (document.hidden && isQuizActive) forceSubmitQuiz("🚨 警告：系統偵測到您切換分頁或離開畫面，已強制收卷！");
 });
 window.addEventListener("blur", () => {
-    if (isQuizActive) {
-        forceSubmitQuiz("🚨 警告：系統偵測到您切換分頁或離開畫面，已依規定強制收卷！");
-    }
+    if (isQuizActive) forceSubmitQuiz("🚨 警告：系統偵測到您切換分頁或離開畫面，已強制收卷！");
 });
 
-// --- 畫布初始化與 PDF 渲染 ---
-async function initQuizCanvas(pdfUrl) {
+// --- 縮放控制邏輯 ---
+let currentQuizScale = 1;
+const quizCanvasWrapper = document.getElementById('quiz-canvas-wrapper');
+
+function applyZoom(scale) {
+    currentQuizScale = scale;
+    quizCanvasWrapper.style.transform = `scale(${currentQuizScale})`;
+    if (fbCanvas) {
+        // 等待 CSS 動畫結束後，重新校正 Fabric 的滑鼠座標計算
+        setTimeout(() => fbCanvas.calcOffset(), 250); 
+    }
+}
+
+document.getElementById('btn-zoom-in')?.addEventListener('click', () => applyZoom(Math.min(currentQuizScale + 0.25, 3)));
+document.getElementById('btn-zoom-out')?.addEventListener('click', () => applyZoom(Math.max(currentQuizScale - 0.25, 0.5)));
+document.getElementById('btn-zoom-reset')?.addEventListener('click', () => applyZoom(1));
+
+
+// --- 初始化 Fabric 畫布與 PDF 渲染 ---
+async function initFabricCanvas(pdfUrl) {
     const loadingText = document.getElementById('quiz-loading-text');
     loadingText.style.display = 'block';
     
     try {
+        // 1. 利用 PDF.js 渲染高畫質底圖
         const loadingTask = pdfjsLib.getDocument(pdfUrl);
         const pdf = await loadingTask.promise;
-        const page = await pdf.getPage(1); // 假設考卷為單頁長圖/PDF
+        const page = await pdf.getPage(1); 
         
-        // 計算縮放比例適應螢幕
-        const wrapperWidth = document.getElementById('quiz-canvas-wrapper').clientWidth;
+        const wrapperWidth = document.getElementById('quiz-scroll-container').clientWidth;
         const unscaledViewport = page.getViewport({ scale: 1 });
         const scale = wrapperWidth / unscaledViewport.width;
-        const viewport = page.getViewport({ scale: scale });
+        const viewport = page.getViewport({ scale: scale * 1.5 }); // 提高渲染解析度讓放大不模糊
 
-        pdfCanvas.width = viewport.width;
-        pdfCanvas.height = viewport.height;
-        drawCanvas.width = viewport.width;
-        drawCanvas.height = viewport.height;
-        
-        // 調整容器高度
-        document.getElementById('quiz-canvas-wrapper').style.height = `${viewport.height}px`;
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = viewport.width;
+        tempCanvas.height = viewport.height;
+        await page.render({ canvasContext: tempCanvas.getContext('2d'), viewport: viewport }).promise;
 
-        const renderContext = { canvasContext: pdfCtx, viewport: viewport };
-        await page.render(renderContext).promise;
+        // 2. 初始化 Fabric 畫布
+        if (fbCanvas) fbCanvas.dispose();
+        fbCanvas = new fabric.Canvas('quiz-fabric-canvas', {
+            isDrawingMode: true, // 預設開啟手寫模式
+            selection: false     // 關閉群組選取框，避免考試時誤觸
+        });
+
+        fbCanvas.setWidth(viewport.width);
+        fbCanvas.setHeight(viewport.height);
+        quizCanvasWrapper.style.width = `${viewport.width}px`;
+        quizCanvasWrapper.style.height = `${viewport.height}px`;
+
+        // 將 PDF 設為背景
+        fabric.Image.fromURL(tempCanvas.toDataURL(), (img) => {
+            fbCanvas.setBackgroundImage(img, fbCanvas.renderAll.bind(fbCanvas));
+        });
+
+        // 設定初始筆刷
+        fbCanvas.freeDrawingBrush.color = '#000000';
+        fbCanvas.freeDrawingBrush.width = 3;
         
-        // 初始化畫筆狀態
-        setupDrawingEvents();
+        setupFabricEvents();
         loadingText.style.display = 'none';
 
     } catch (err) {
@@ -1961,119 +1984,74 @@ async function initQuizCanvas(pdfUrl) {
     }
 }
 
-// --- 手寫畫布邏輯 ---
-let isDrawing = false;
-let currentPenColor = "#000000";
-let currentToolMode = "pen"; // "pen" or "eraser"
-
-// 工具列切換
-document.querySelectorAll('.quiz-tool-btn').forEach(btn => {
+// --- Fabric.js 工具切換與防手掌誤觸 ---
+document.querySelectorAll('.quiz-tool-btn[data-tool]').forEach(btn => {
     btn.addEventListener('click', (e) => {
-        document.querySelectorAll('.quiz-tool-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.quiz-tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
         e.target.classList.add('active');
         
         const tool = e.target.getAttribute('data-tool');
         if (tool === "pen") {
             currentToolMode = "pen";
-            currentPenColor = e.target.getAttribute('data-color');
+            fbCanvas.isDrawingMode = true;
+            fbCanvas.freeDrawingBrush.color = e.target.getAttribute('data-color');
         } else {
             currentToolMode = "eraser";
+            fbCanvas.isDrawingMode = false; // 關閉自由書寫，變成選取模式來觸發橡皮擦
         }
     });
 });
 
-function getDrawPos(e) {
-    const rect = drawCanvas.getBoundingClientRect();
-    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-    return {
-        x: (clientX - rect.left) * (drawCanvas.width / rect.width),
-        y: (clientY - rect.top) * (drawCanvas.height / rect.height)
-    };
+function setupFabricEvents() {
+    // 🌟 防弊與防誤觸機制：偵測按壓來源
+    fbCanvas.on('mouse:down', function(opt) {
+        // 如果是手指 (touch) 碰到畫面，強制關閉畫筆，讓外層原生卷軸可以滑動！
+        if (opt.e.pointerType === 'touch') {
+            fbCanvas.isDrawingMode = false;
+            return;
+        }
+
+        if (currentToolMode === 'pen') {
+            fbCanvas.isDrawingMode = true; // 筆或滑鼠，正常畫線
+        } else if (currentToolMode === 'eraser') {
+            fbCanvas.isDrawingMode = false;
+            // 物件橡皮擦：點到哪條線，那條線就刪除
+            if (opt.target && opt.target.type === 'path') {
+                fbCanvas.remove(opt.target);
+            }
+        }
+    });
+
+    // 🌟 滑動橡皮擦：按住橡皮擦滑過也能刪除
+    fbCanvas.on('mouse:move', function(opt) {
+        if (currentToolMode === 'eraser' && (opt.e.buttons === 1 || opt.e.pressure > 0)) {
+            if (opt.target && opt.target.type === 'path') {
+                fbCanvas.remove(opt.target);
+            }
+        }
+    });
 }
 
-function startDrawing(e) {
-    e.preventDefault(); // 阻止螢幕滑動
-    isDrawing = true;
-    const pos = getDrawPos(e);
-    drawCtx.beginPath();
-    drawCtx.moveTo(pos.x, pos.y);
-    
-    if (currentToolMode === "eraser") {
-        drawCtx.globalCompositeOperation = "destination-out";
-        drawCtx.lineWidth = 20; // 橡皮擦粗細
-    } else {
-        drawCtx.globalCompositeOperation = "source-over";
-        drawCtx.strokeStyle = currentPenColor;
-        drawCtx.lineWidth = 2; // 筆寬
-        drawCtx.lineCap = "round";
-        drawCtx.lineJoin = "round";
-    }
-}
-
-function draw(e) {
-    if (!isDrawing) return;
-    e.preventDefault();
-    const pos = getDrawPos(e);
-    drawCtx.lineTo(pos.x, pos.y);
-    drawCtx.stroke();
-}
-
-function stopDrawing() {
-    isDrawing = false;
-    drawCtx.closePath();
-}
-
-function setupDrawingEvents() {
-    // 支援滑鼠與觸控
-    drawCanvas.addEventListener('mousedown', startDrawing);
-    drawCanvas.addEventListener('mousemove', draw);
-    drawCanvas.addEventListener('mouseup', stopDrawing);
-    drawCanvas.addEventListener('mouseout', stopDrawing);
-    
-    drawCanvas.addEventListener('touchstart', startDrawing, { passive: false });
-    drawCanvas.addEventListener('touchmove', draw, { passive: false });
-    drawCanvas.addEventListener('touchend', stopDrawing);
-}
-
-// --- 交卷處理邏輯 (結合畫布) ---
+// --- 交卷處理邏輯 (呼叫 Fabric 匯出) ---
 document.getElementById('quiz-submit-early-btn')?.addEventListener('click', () => {
-    if(confirm("確定要提前交卷嗎？交卷後無法修改！")) {
-        forceSubmitQuiz("🎉 交卷成功！");
-    }
+    if(confirm("確定要提前交卷嗎？交卷後無法修改！")) forceSubmitQuiz("🎉 交卷成功！");
 });
 
 async function forceSubmitQuiz(alertMessage) {
     if (!isQuizActive) return;
-    isQuizActive = false; // 關閉防弊與狀態
+    isQuizActive = false; 
     clearInterval(quizTimerInterval);
     
     document.getElementById('quiz-timer').innerText = "上傳中...";
-    document.querySelectorAll('.quiz-tool-btn').forEach(b => b.disabled = true);
     
     try {
-        // 1. 建立一個暫存畫布來合併 PDF 底層與手寫表層
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = pdfCanvas.width;
-        tempCanvas.height = pdfCanvas.height;
-        const tempCtx = tempCanvas.getContext('2d');
-        
-        // 畫上白色背景 (防止透明背景變黑)
-        tempCtx.fillStyle = "#ffffff";
-        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
-        
-        // 疊加 PDF 與 手寫軌跡
-        tempCtx.drawImage(pdfCanvas, 0, 0);
-        tempCtx.drawImage(drawCanvas, 0, 0);
-        
-        // 2. 轉換成 Blob 檔案
-        const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/jpeg', 0.8));
+        // Fabric.js 強大的合併輸出，只需一行代碼
+        const dataURL = fbCanvas.toDataURL({ format: 'jpeg', quality: 0.8 });
+        const blob = await fetch(dataURL).then(res => res.blob());
         const file = new File([blob], `quiz_submit_${activeQuizId}.jpg`, { type: "image/jpeg" });
         
-        // 3. 上傳至 Cloudinary (呼叫你原本的函式)
         const uploadResult = await uploadFileToCloudinary(file);
         
-        // 4. 更新 Firebase 資料庫狀態
         await updateDoc(doc(db, "tasks", activeQuizId), {
             status: "已完成",
             studentReplyUrls: [uploadResult.url], 
@@ -2083,7 +2061,6 @@ async function forceSubmitQuiz(alertMessage) {
 
         alert(alertMessage);
         
-        // 結束後返回並重整模式選單
         quizActiveArea.style.display = 'none';
         studentQuizArea.style.display = 'none';
         document.getElementById('subject-area').style.display = 'block';

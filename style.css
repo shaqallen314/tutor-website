@@ -607,9 +607,6 @@ body {
     /* 預設給一個高度，後續靠 JS 依據 PDF 比例撐開 */
     min-height: 800px; 
     background: #ecf0f1;
-    overflow: hidden;
-    border: 1px solid #bdc3c7;
-    border-radius: 0 0 8px 8px;
     cursor: crosshair;
 }
 

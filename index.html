@@ -8,6 +8,7 @@
     <link rel="icon" type="image/png" href="./favicon.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
 </head>
 
 <body>
@@ -258,20 +259,29 @@
                             <div class="quiz-tools">
                                 <button class="quiz-tool-btn active" data-tool="pen" data-color="#000000">🖊️ 黑筆</button>
                                 <button class="quiz-tool-btn" data-tool="pen" data-color="#2980b9">🖊️ 藍筆</button>
-                                <button class="quiz-tool-btn" data-tool="pen" data-color="#c0392b">🖊️ 紅筆</button>
+                                <button class="quiz-tool-btn" data-tool="pen" data-color="#c0392b">🖊️️ 紅筆</button>
                                 <button class="quiz-tool-btn" data-tool="eraser">🧼 橡皮擦</button>
-                                <button id="quiz-submit-early-btn" class="primary-btn" style="background-color: #27ae60; padding: 6px 15px; font-size: 14px; width: auto; margin-left: 15px;">提前交卷</button>
+                                
+                                <!-- ⬇️ 縮放控制按鈕 -->
+                                <div style="border-left: 2px solid #bdc3c7; padding-left: 10px; margin-left: 5px; display: flex; gap: 5px;">
+                                    <button id="btn-zoom-in" class="quiz-tool-btn">🔍 放大</button>
+                                    <button id="btn-zoom-out" class="quiz-tool-btn">🔍 縮小</button>
+                                    <button id="btn-zoom-reset" class="quiz-tool-btn">🔄 重置</button>
+                                </div>
+                                
+                                <button id="quiz-submit-early-btn" class="primary-btn" style="background-color: #27ae60; padding: 6px 15px; font-size: 14px; width: auto; margin-left: auto;">提前交卷</button>
                             </div>
                         </div>
 
-                        <!-- 畫布容器：負責疊加 PDF 與手寫層 -->
-                        <div id="quiz-canvas-wrapper">
-                            <p id="quiz-loading-text" style="text-align:center; color:#7f8c8d; margin-top:50px;">🔄 試卷載入中，請稍候...</p>
-                            <!-- 底層：用來渲染 PDF -->
-                            <canvas id="pdf-render-canvas"></canvas>
-                            <!-- 表層：用來捕捉手寫軌跡 -->
-                            <canvas id="drawing-canvas"></canvas>
+                        <!-- ⬇️ 原生卷軸容器 (讓放大後可以平移) -->
+                        <div id="quiz-scroll-container" style="width: 100%; overflow: auto; max-height: 75vh; border: 1px solid #bdc3c7; border-radius: 0 0 8px 8px; background: #ecf0f1;">
+                            <div id="quiz-canvas-wrapper" style="transform-origin: top left; transition: transform 0.2s ease; position: relative;">
+                                <p id="quiz-loading-text" style="text-align:center; color:#7f8c8d; margin-top:50px;">🔄 試卷載入中，請稍候...</p>
+                                <!-- 交給 Fabric.js 管理的唯一畫布 -->
+                                <canvas id="quiz-fabric-canvas"></canvas>
+                            </div>
                         </div>
+                    
                     </div>
                 </div>
             </div>
