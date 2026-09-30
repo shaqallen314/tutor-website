@@ -1957,7 +1957,7 @@ async function initFabricCanvas(pdfUrl) {
         // 2. 初始化 Fabric 畫布
         if (fbCanvas) fbCanvas.dispose();
         fbCanvas = new fabric.Canvas('quiz-fabric-canvas', {
-            isDrawingMode: true, // 預設開啟手寫模式
+            isDrawingMode: false, // 預設關閉手寫模式
             selection: false     // 關閉群組選取框，避免考試時誤觸
         });
 
@@ -1993,36 +1993,58 @@ document.querySelectorAll('.quiz-tool-btn[data-tool]').forEach(btn => {
         const tool = e.target.getAttribute('data-tool');
         if (tool === "pen") {
             currentToolMode = "pen";
-            fbCanvas.isDrawingMode = true;
+            // 🛑 不要在這裡開啟繪圖模式！維持關閉以確保預設可滑動
+            fbCanvas.isDrawingMode = false; 
             fbCanvas.freeDrawingBrush.color = e.target.getAttribute('data-color');
         } else {
             currentToolMode = "eraser";
-            fbCanvas.isDrawingMode = false; // 關閉自由書寫，變成選取模式來觸發橡皮擦
+            fbCanvas.isDrawingMode = false;
         }
     });
 });
 
 function setupFabricEvents() {
-    // 🌟 防弊與防誤觸機制：偵測按壓來源
-    fbCanvas.on('mouse:down', function(opt) {
-        // 如果是手指 (touch) 碰到畫面，強制關閉畫筆，讓外層原生卷軸可以滑動！
-        if (opt.e.pointerType === 'touch') {
-            fbCanvas.isDrawingMode = false;
-            return;
-        }
+    // 1. 開放 Fabric 的觸控滑動權限
+    fbCanvas.allowTouchScrolling = true;
+    fbCanvas.isDrawingMode = false; 
 
-        if (currentToolMode === 'pen') {
-            fbCanvas.isDrawingMode = true; // 筆或滑鼠，正常畫線
-        } else if (currentToolMode === 'eraser') {
+    const upperCanvas = fbCanvas.upperCanvasEl;
+
+    // 2. 🌟 終極防誤觸機制：在最高優先級的「捕獲階段」攔截 PointerEvent
+    upperCanvas.addEventListener('pointerdown', function(e) {
+        if (e.pointerType === 'pen' || e.pointerType === 'mouse') {
+            // 偵測到手寫筆或滑鼠：如果是畫筆模式，在落筆瞬間開啟繪圖
+            if (currentToolMode === 'pen') {
+                fbCanvas.isDrawingMode = true;
+            }
+        } else if (e.pointerType === 'touch') {
+            // 偵測到手指：確保繪圖模式關閉，原生卷軸會完美接手滑動
             fbCanvas.isDrawingMode = false;
-            // 物件橡皮擦：點到哪條線，那條線就刪除
+        }
+    }, { capture: true });
+
+    // 3. 筆尖離開螢幕時，立刻關閉繪圖模式，把「滑動權」還給手指
+    upperCanvas.addEventListener('pointerup', function() {
+        fbCanvas.isDrawingMode = false;
+    }, { capture: true });
+    
+    upperCanvas.addEventListener('pointerout', function() {
+        fbCanvas.isDrawingMode = false;
+    }, { capture: true });
+    
+    upperCanvas.addEventListener('pointercancel', function() {
+        fbCanvas.isDrawingMode = false;
+    }, { capture: true });
+
+    // 4. 物件橡皮擦邏輯 (保持不變)
+    fbCanvas.on('mouse:down', function(opt) {
+        if (currentToolMode === 'eraser' && !fbCanvas.isDrawingMode) {
             if (opt.target && opt.target.type === 'path') {
                 fbCanvas.remove(opt.target);
             }
         }
     });
 
-    // 🌟 滑動橡皮擦：按住橡皮擦滑過也能刪除
     fbCanvas.on('mouse:move', function(opt) {
         if (currentToolMode === 'eraser' && (opt.e.buttons === 1 || opt.e.pressure > 0)) {
             if (opt.target && opt.target.type === 'path') {
