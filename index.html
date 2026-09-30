@@ -274,11 +274,13 @@
                         </div>
 
                         <!-- ⬇️ 原生卷軸容器 (讓放大後可以平移) -->
-                        <div id="quiz-scroll-container" style="width: 100%; overflow: auto; max-height: 75vh; border: 1px solid #bdc3c7; border-radius: 0 0 8px 8px; background: #ecf0f1;">
+                        <div id="quiz-scroll-container" style="width: 100%; overflow: auto; max-height: 75vh; border: 1px solid #bdc3c7; border-radius: 0 0 8px 8px; background: #ecf0f1; touch-action: pan-x pan-y;">
                             <div id="quiz-canvas-wrapper" style="transform-origin: top left; transition: transform 0.2s ease; position: relative;">
                                 <p id="quiz-loading-text" style="text-align:center; color:#7f8c8d; margin-top:50px;">🔄 試卷載入中，請稍候...</p>
-                                <!-- 交給 Fabric.js 管理的唯一畫布 -->
-                                <canvas id="quiz-fabric-canvas"></canvas>
+                                <!-- 底層 PDF 畫布 -->
+                                <canvas id="pdf-render-canvas" style="position: absolute; top: 0; left: 0; z-index: 1;"></canvas>
+                                <!-- 表層手寫畫布 (重點：加入 touch-action 讓瀏覽器接管手指滑動) -->
+                                <canvas id="drawing-canvas" style="position: absolute; top: 0; left: 0; z-index: 2; touch-action: pan-x pan-y;"></canvas>
                             </div>
                         </div>
                     

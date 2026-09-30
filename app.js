@@ -1811,15 +1811,13 @@ adminFlashcardSelect.addEventListener('change', async (e) => {
 });
 
 // ==========================================
-// 13. 線上測驗 (Fabric.js 向量畫布與防弊引擎) 核心區塊
+// 13. 線上測驗 (iPad 原生特化防誤觸引擎) 核心區塊
 // ==========================================
 
 let activeQuizId = null;
 let quizTimerInterval = null;
 let quizTimeRemaining = 0;
 let isQuizActive = false;
-let fbCanvas = null; // Fabric 畫布實例
-let currentToolMode = "pen"; 
 
 const studentQuizArea = document.getElementById('student-quiz-area');
 const quizLobbyArea = document.getElementById('quiz-lobby-area');
@@ -1876,12 +1874,13 @@ document.getElementById('lobby-start-btn')?.addEventListener('click', async (e) 
     // 初始化 UI 與重置縮放
     applyZoom(1);
     document.querySelectorAll('.quiz-tool-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector('.quiz-tool-btn[data-color="#000000"]').classList.add('active');
+    document.querySelector('.quiz-tool-btn[data-color="#000000"]')?.classList.add('active');
     currentToolMode = "pen";
+    currentPenColor = "#000000";
 
     updateTimerDisplay();
     startQuizTimer();
-    await initFabricCanvas(pdfUrl);
+    await initQuizCanvas(pdfUrl);
 });
 
 // --- 計時器與防弊機制 ---
@@ -1922,10 +1921,6 @@ const quizCanvasWrapper = document.getElementById('quiz-canvas-wrapper');
 function applyZoom(scale) {
     currentQuizScale = scale;
     quizCanvasWrapper.style.transform = `scale(${currentQuizScale})`;
-    if (fbCanvas) {
-        // 等待 CSS 動畫結束後，重新校正 Fabric 的滑鼠座標計算
-        setTimeout(() => fbCanvas.calcOffset(), 250); 
-    }
 }
 
 document.getElementById('btn-zoom-in')?.addEventListener('click', () => applyZoom(Math.min(currentQuizScale + 0.25, 3)));
@@ -1933,13 +1928,19 @@ document.getElementById('btn-zoom-out')?.addEventListener('click', () => applyZo
 document.getElementById('btn-zoom-reset')?.addEventListener('click', () => applyZoom(1));
 
 
-// --- 初始化 Fabric 畫布與 PDF 渲染 ---
-async function initFabricCanvas(pdfUrl) {
+// --- 畫布初始化與 PDF 渲染 ---
+let pdfCanvas, drawCanvas, pdfCtx, drawCtx;
+
+async function initQuizCanvas(pdfUrl) {
     const loadingText = document.getElementById('quiz-loading-text');
     loadingText.style.display = 'block';
     
+    pdfCanvas = document.getElementById('pdf-render-canvas');
+    drawCanvas = document.getElementById('drawing-canvas');
+    pdfCtx = pdfCanvas.getContext('2d');
+    drawCtx = drawCanvas.getContext('2d');
+    
     try {
-        // 1. 利用 PDF.js 渲染高畫質底圖
         const loadingTask = pdfjsLib.getDocument(pdfUrl);
         const pdf = await loadingTask.promise;
         const page = await pdf.getPage(1); 
@@ -1947,35 +1948,19 @@ async function initFabricCanvas(pdfUrl) {
         const wrapperWidth = document.getElementById('quiz-scroll-container').clientWidth;
         const unscaledViewport = page.getViewport({ scale: 1 });
         const scale = wrapperWidth / unscaledViewport.width;
-        const viewport = page.getViewport({ scale: scale * 1.5 }); // 提高渲染解析度讓放大不模糊
+        const viewport = page.getViewport({ scale: scale * 1.5 }); // 提高解析度
 
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = viewport.width;
-        tempCanvas.height = viewport.height;
-        await page.render({ canvasContext: tempCanvas.getContext('2d'), viewport: viewport }).promise;
-
-        // 2. 初始化 Fabric 畫布
-        if (fbCanvas) fbCanvas.dispose();
-        fbCanvas = new fabric.Canvas('quiz-fabric-canvas', {
-            isDrawingMode: false, // 預設關閉手寫模式
-            selection: false     // 關閉群組選取框，避免考試時誤觸
-        });
-
-        fbCanvas.setWidth(viewport.width);
-        fbCanvas.setHeight(viewport.height);
+        pdfCanvas.width = viewport.width;
+        pdfCanvas.height = viewport.height;
+        drawCanvas.width = viewport.width;
+        drawCanvas.height = viewport.height;
+        
         quizCanvasWrapper.style.width = `${viewport.width}px`;
         quizCanvasWrapper.style.height = `${viewport.height}px`;
 
-        // 將 PDF 設為背景
-        fabric.Image.fromURL(tempCanvas.toDataURL(), (img) => {
-            fbCanvas.setBackgroundImage(img, fbCanvas.renderAll.bind(fbCanvas));
-        });
-
-        // 設定初始筆刷
-        fbCanvas.freeDrawingBrush.color = '#000000';
-        fbCanvas.freeDrawingBrush.width = 3;
+        await page.render({ canvasContext: pdfCtx, viewport: viewport }).promise;
         
-        setupFabricEvents();
+        setupNativeDrawingEvents();
         loadingText.style.display = 'none';
 
     } catch (err) {
@@ -1984,7 +1969,13 @@ async function initFabricCanvas(pdfUrl) {
     }
 }
 
-// --- Fabric.js 工具切換與防手掌誤觸 ---
+// --- 手寫邏輯與防手掌誤觸 ---
+let isDrawing = false;
+let currentPenColor = "#000000";
+let currentToolMode = "pen"; 
+let lastX = 0;
+let lastY = 0;
+
 document.querySelectorAll('.quiz-tool-btn[data-tool]').forEach(btn => {
     btn.addEventListener('click', (e) => {
         document.querySelectorAll('.quiz-tool-btn[data-tool]').forEach(b => b.classList.remove('active'));
@@ -1993,68 +1984,73 @@ document.querySelectorAll('.quiz-tool-btn[data-tool]').forEach(btn => {
         const tool = e.target.getAttribute('data-tool');
         if (tool === "pen") {
             currentToolMode = "pen";
-            // 🛑 不要在這裡開啟繪圖模式！維持關閉以確保預設可滑動
-            fbCanvas.isDrawingMode = false; 
-            fbCanvas.freeDrawingBrush.color = e.target.getAttribute('data-color');
+            currentPenColor = e.target.getAttribute('data-color');
         } else {
             currentToolMode = "eraser";
-            fbCanvas.isDrawingMode = false;
         }
     });
 });
 
-function setupFabricEvents() {
-    // 1. 開放 Fabric 的觸控滑動權限
-    fbCanvas.allowTouchScrolling = true;
-    fbCanvas.isDrawingMode = false; 
-
-    const upperCanvas = fbCanvas.upperCanvasEl;
-
-    // 2. 🌟 終極防誤觸機制：在最高優先級的「捕獲階段」攔截 PointerEvent
-    upperCanvas.addEventListener('pointerdown', function(e) {
-        if (e.pointerType === 'pen' || e.pointerType === 'mouse') {
-            // 偵測到手寫筆或滑鼠：如果是畫筆模式，在落筆瞬間開啟繪圖
-            if (currentToolMode === 'pen') {
-                fbCanvas.isDrawingMode = true;
-            }
-        } else if (e.pointerType === 'touch') {
-            // 偵測到手指：確保繪圖模式關閉，原生卷軸會完美接手滑動
-            fbCanvas.isDrawingMode = false;
-        }
-    }, { capture: true });
-
-    // 3. 筆尖離開螢幕時，立刻關閉繪圖模式，把「滑動權」還給手指
-    upperCanvas.addEventListener('pointerup', function() {
-        fbCanvas.isDrawingMode = false;
-    }, { capture: true });
-    
-    upperCanvas.addEventListener('pointerout', function() {
-        fbCanvas.isDrawingMode = false;
-    }, { capture: true });
-    
-    upperCanvas.addEventListener('pointercancel', function() {
-        fbCanvas.isDrawingMode = false;
-    }, { capture: true });
-
-    // 4. 物件橡皮擦邏輯 (保持不變)
-    fbCanvas.on('mouse:down', function(opt) {
-        if (currentToolMode === 'eraser' && !fbCanvas.isDrawingMode) {
-            if (opt.target && opt.target.type === 'path') {
-                fbCanvas.remove(opt.target);
-            }
-        }
-    });
-
-    fbCanvas.on('mouse:move', function(opt) {
-        if (currentToolMode === 'eraser' && (opt.e.buttons === 1 || opt.e.pressure > 0)) {
-            if (opt.target && opt.target.type === 'path') {
-                fbCanvas.remove(opt.target);
-            }
-        }
-    });
+function getDrawPos(e) {
+    const rect = drawCanvas.getBoundingClientRect();
+    return {
+        x: (e.clientX - rect.left) * (drawCanvas.width / rect.width),
+        y: (e.clientY - rect.top) * (drawCanvas.height / rect.height)
+    };
 }
 
-// --- 交卷處理邏輯 (呼叫 Fabric 匯出) ---
+function setupNativeDrawingEvents() {
+    // 🌟 iPad 完美防誤觸核心邏輯
+    drawCanvas.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'touch') return; // 如果是手指，什麼都不做，讓瀏覽器去滑動畫布
+        
+        e.preventDefault(); // 如果是手寫筆，鎖死原生滑動行為
+        drawCanvas.setPointerCapture(e.pointerId);
+        isDrawing = true;
+        
+        const pos = getDrawPos(e);
+        lastX = pos.x;
+        lastY = pos.y;
+    });
+
+    drawCanvas.addEventListener('pointermove', (e) => {
+        if (!isDrawing || e.pointerType === 'touch') return; // 忽略手指
+        
+        e.preventDefault(); // 手寫筆移動時鎖死滑動
+        const pos = getDrawPos(e);
+
+        drawCtx.beginPath();
+        if (currentToolMode === "eraser") {
+            drawCtx.globalCompositeOperation = "destination-out";
+            drawCtx.lineWidth = 30; // 橡皮擦範圍
+        } else {
+            drawCtx.globalCompositeOperation = "source-over";
+            drawCtx.strokeStyle = currentPenColor;
+            drawCtx.lineWidth = 3;
+            drawCtx.lineCap = "round";
+            drawCtx.lineJoin = "round";
+        }
+
+        // 🌟 修復 A-B 連線問題：精準計算兩點座標
+        drawCtx.moveTo(lastX, lastY);
+        drawCtx.lineTo(pos.x, pos.y);
+        drawCtx.stroke();
+
+        lastX = pos.x;
+        lastY = pos.y;
+    });
+
+    const stopDrawing = (e) => {
+        if (e.pointerType === 'touch') return;
+        isDrawing = false;
+    };
+
+    drawCanvas.addEventListener('pointerup', stopDrawing);
+    drawCanvas.addEventListener('pointerout', stopDrawing);
+    drawCanvas.addEventListener('pointercancel', stopDrawing);
+}
+
+// --- 交卷處理邏輯 (結合雙層畫布) ---
 document.getElementById('quiz-submit-early-btn')?.addEventListener('click', () => {
     if(confirm("確定要提前交卷嗎？交卷後無法修改！")) forceSubmitQuiz("🎉 交卷成功！");
 });
@@ -2065,11 +2061,21 @@ async function forceSubmitQuiz(alertMessage) {
     clearInterval(quizTimerInterval);
     
     document.getElementById('quiz-timer').innerText = "上傳中...";
+    document.querySelectorAll('.quiz-tool-btn').forEach(b => b.disabled = true);
     
     try {
-        // Fabric.js 強大的合併輸出，只需一行代碼
-        const dataURL = fbCanvas.toDataURL({ format: 'jpeg', quality: 0.8 });
-        const blob = await fetch(dataURL).then(res => res.blob());
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = pdfCanvas.width;
+        tempCanvas.height = pdfCanvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        tempCtx.fillStyle = "#ffffff";
+        tempCtx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
+        
+        tempCtx.drawImage(pdfCanvas, 0, 0);
+        tempCtx.drawImage(drawCanvas, 0, 0);
+        
+        const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, 'image/jpeg', 0.8));
         const file = new File([blob], `quiz_submit_${activeQuizId}.jpg`, { type: "image/jpeg" });
         
         const uploadResult = await uploadFileToCloudinary(file);
