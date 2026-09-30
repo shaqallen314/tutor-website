@@ -2000,11 +2000,11 @@ function getDrawPos(e) {
 }
 
 function setupNativeDrawingEvents() {
-    // 🌟 iPad 完美防誤觸核心邏輯
+    // 🌟 iPad 完美防誤觸核心邏輯 (Pointer Events)
     drawCanvas.addEventListener('pointerdown', (e) => {
-        if (e.pointerType === 'touch') return; // 如果是手指，什麼都不做，讓瀏覽器去滑動畫布
+        if (e.pointerType === 'touch') return; // 如果是手指，什麼都不做
         
-        e.preventDefault(); // 如果是手寫筆，鎖死原生滑動行為
+        e.preventDefault(); 
         drawCanvas.setPointerCapture(e.pointerId);
         isDrawing = true;
         
@@ -2014,15 +2014,15 @@ function setupNativeDrawingEvents() {
     });
 
     drawCanvas.addEventListener('pointermove', (e) => {
-        if (!isDrawing || e.pointerType === 'touch') return; // 忽略手指
+        if (!isDrawing || e.pointerType === 'touch') return; 
         
-        e.preventDefault(); // 手寫筆移動時鎖死滑動
+        e.preventDefault(); 
         const pos = getDrawPos(e);
 
         drawCtx.beginPath();
         if (currentToolMode === "eraser") {
             drawCtx.globalCompositeOperation = "destination-out";
-            drawCtx.lineWidth = 30; // 橡皮擦範圍
+            drawCtx.lineWidth = 30; 
         } else {
             drawCtx.globalCompositeOperation = "source-over";
             drawCtx.strokeStyle = currentPenColor;
@@ -2031,7 +2031,6 @@ function setupNativeDrawingEvents() {
             drawCtx.lineJoin = "round";
         }
 
-        // 🌟 修復 A-B 連線問題：精準計算兩點座標
         drawCtx.moveTo(lastX, lastY);
         drawCtx.lineTo(pos.x, pos.y);
         drawCtx.stroke();
@@ -2048,6 +2047,20 @@ function setupNativeDrawingEvents() {
     drawCanvas.addEventListener('pointerup', stopDrawing);
     drawCanvas.addEventListener('pointerout', stopDrawing);
     drawCanvas.addEventListener('pointercancel', stopDrawing);
+
+    // 🌟 iPad Safari 專屬防滑動補丁 (Touch Events)
+    // 專門攔截 Apple Pencil，強制沒收它的滑動畫布權限
+    drawCanvas.addEventListener('touchstart', (e) => {
+        if (e.touches && e.touches[0] && e.touches[0].touchType === 'stylus') {
+            e.preventDefault(); 
+        }
+    }, { passive: false });
+
+    drawCanvas.addEventListener('touchmove', (e) => {
+        if (e.touches && e.touches[0] && e.touches[0].touchType === 'stylus') {
+            e.preventDefault();
+        }
+    }, { passive: false });
 }
 
 // --- 交卷處理邏輯 (結合雙層畫布) ---
