@@ -1059,7 +1059,7 @@ tasksData.forEach((task) => {
         } else {
             // 🌟 整合外部 Vercel 測驗系統：將任務 ID、學生姓名、考卷網址等資訊打包進 URL 中
             const vercelAppUrl = "https://tutor-handwrite-quiz.vercel.app/";
-            const queryParams = `?taskId=${taskId}&student=${encodeURIComponent(currentLoggedInStudent)}&pdfUrl=${encodeURIComponent(task.fileUrl)}&time=${task.timeLimit}&title=${encodeURIComponent(task.title)}`;
+            const queryParams = `?taskId=${taskId}&student=${encodeURIComponent(currentLoggedInStudent)}`;
             const targetUrl = vercelAppUrl + queryParams;
 
             innerHTML += `
