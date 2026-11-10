@@ -9,6 +9,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';</script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
+    <!-- 引入 KaTeX 數學公式渲染引擎 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
 </head>
 
 <body>
@@ -286,6 +289,54 @@
                     
                     </div>
                 </div>
+                <div id="student-basic-skills-area" style="display: none; margin-top: 20px;">
+                    
+                    <!-- 狀態 1. 選擇練功單元 -->
+                    <div id="basic-skills-selection">
+                        <h3 style="color: #d35400; border-bottom: 2px dashed #f39c12; padding-bottom: 10px;">🎯 請選擇要修練的單元</h3>
+                        <div class="grid-container">
+                            <button class="grid-btn skill-topic-btn" data-topic="linear-equation">直線方程式：兩點求一般式</button>
+                            <button class="grid-btn skill-topic-btn" data-topic="quadratic-find-vertex">二次函數：求對稱點</button>
+                            <button class="grid-btn skill-topic-btn" data-topic="quadratic-build">二次函數：求方程式</button>
+                            <button class="grid-btn skill-topic-btn" data-topic="abs-inequality">絕對值不等式</button>
+                            <button class="grid-btn skill-topic-btn" data-topic="am-gm-inequality">算幾不等式</button>
+                            <button class="grid-btn skill-topic-btn" data-topic="polynomial-remainder">多項式求餘式</button>
+                            <!-- 之後可依需求隨時增加新按鈕 -->
+                        </div>
+                    </div>
+
+                    <!-- 狀態 2. 練功房 (預設隱藏) -->
+                    <div id="basic-skills-practice-room" style="display: none; background: #fff; padding: 20px; border-radius: 12px; border-top: 5px solid #e67e22; box-shadow: 0 4px 15px rgba(0,0,0,0.05);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 id="practice-topic-title" style="margin: 0; color: #d35400; font-size: 18px;">單元名稱</h3>
+                            <button id="exit-practice-btn" class="primary-btn" style="background-color: #95a5a6; width: auto; padding: 6px 15px; font-size: 14px;">⬅ 退出修練</button>
+                        </div>
+                        
+                        <!-- 題目顯示區 -->
+                        <div style="font-size: 22px; margin: 20px 0; min-height: 100px; display: flex; align-items: center; justify-content: center; background: #fdf2e9; padding: 30px 20px; border-radius: 12px; text-align: center; color: #2c3e50;">
+                            <span id="practice-question-display">題目載入中...</span>
+                        </div>
+
+                        <!-- 學生作答區 -->
+                        <!-- ⬇️ 修改：將提示文字移到框框上方 -->
+                        <p id="practice-hint-text" style="color: #7f8c8d; font-size: 15px; margin-bottom: 12px; text-align: center; font-weight: bold;"></p>
+                        
+                        <!-- ⬇️ 修改：學生作答區 (改為彈性容器，容納填空骨幹) -->
+                        <div id="practice-answer-container" style="text-align: center; margin-bottom: 25px; font-size: 22px; color: #2c3e50; display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 8px;">
+                            <!-- 這裡會由 JS 動態塞入 input 骨幹 -->
+                        </div>
+                        
+                        <div style="text-align: center;">
+                            <button id="practice-submit-btn" class="primary-btn" style="background-color: #e67e22; width: 100%; max-width: 350px; font-size: 18px;">確認送出</button>
+                        </div>
+                        
+                        <!-- 結果回饋與下一題 -->
+                        <div id="practice-feedback-area" style="display: none; margin-top: 25px; padding: 20px; border-radius: 10px; text-align: center;">
+                            <p id="practice-feedback-text" style="font-size: 20px; font-weight: bold; margin: 0 0 20px 0;"></p>
+                            <button id="practice-next-btn" class="primary-btn" style="background-color: #27ae60; width: 100%; max-width: 350px; font-size: 18px;">🔄 再練一題</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </main>
     </div> 
@@ -302,6 +353,7 @@
         <div class="sidebar-item btn-flyout" data-type="練習題">✏️ 實戰練習題</div>
         <div class="sidebar-item btn-flyout" data-type="線上測驗">⏱️ 線上測驗</div>
         <div class="sidebar-item btn-flyout" data-type="閃字卡">📇 閃字卡診斷</div>
+        <div class="sidebar-item btn-flyout" data-type="基本功">🔥 基本功道場</div>
     </div>
 
     <script type="module" src="app.js?v=1.1"></script>

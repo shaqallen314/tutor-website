@@ -96,6 +96,22 @@ const adminFlashcardReportArea = document.getElementById('admin-flashcard-report
 const adminFlashcardSelect = document.getElementById('admin-flashcard-select');
 const adminFlashcardReportContent = document.getElementById('admin-flashcard-report-content');
 
+// 🌟 基本功道場專屬 DOM 元素
+const studentBasicSkillsArea = document.getElementById('student-basic-skills-area');
+const basicSkillsSelection = document.getElementById('basic-skills-selection');
+const basicSkillsPracticeRoom = document.getElementById('basic-skills-practice-room');
+const practiceTopicTitle = document.getElementById('practice-topic-title');
+const practiceQuestionDisplay = document.getElementById('practice-question-display');
+const practiceAnswerInput = document.getElementById('practice-answer-input');
+const practiceSubmitBtn = document.getElementById('practice-submit-btn');
+const practiceFeedbackArea = document.getElementById('practice-feedback-area');
+const practiceFeedbackText = document.getElementById('practice-feedback-text');
+const practiceNextBtn = document.getElementById('practice-next-btn');
+const exitPracticeBtn = document.getElementById('exit-practice-btn');
+
+let currentPracticeTopic = "";  // 紀錄目前修練的單元
+let currentPracticeAnswer = ""; // 紀錄當下題目的正確答案
+
 // 🌟 閃字卡狀態紀錄變數
 let allFlashcardDecks = {}; // 存放解析後的所有字卡組
 let currentFlashcardDeck = []; // 目前正在測驗的這組字卡陣列
@@ -240,6 +256,7 @@ document.querySelectorAll('.sidebar-item').forEach(item => {
             if (dashboardArea) dashboardArea.style.display = 'none';
             if (weeklyProgressArea) weeklyProgressArea.style.display = 'none';
             if (studentFlashcardArea) studentFlashcardArea.style.display = 'none';
+            if (studentBasicSkillsArea) studentBasicSkillsArea.style.display = 'none';
             document.getElementById('student-task-list').innerHTML = '';
             
             if (currentType === "首頁") {
@@ -261,6 +278,14 @@ document.querySelectorAll('.sidebar-item').forEach(item => {
                     flashcardSelectionArea.style.display = 'block';
                     flashcardTestArea.style.display = 'none';
                     if (typeof loadStudentFlashcardDecks === "function") loadStudentFlashcardDecks();
+                }
+            } else if (currentType === "基本功") {
+                sectionTitle.innerText = "🔥 基本功道場";
+                sectionDesc.innerText = "紮實的計算功底是拿高分的關鍵！請選擇你想修練的單元。";
+                if (studentBasicSkillsArea) {
+                    studentBasicSkillsArea.style.display = 'block';
+                    basicSkillsSelection.style.display = 'block';
+                    basicSkillsPracticeRoom.style.display = 'none';
                 }
             } else {
                 sectionTitle.innerText = currentType === "講義" ? "📖 講義區" : "✏️ 練習題區";
@@ -1815,3 +1840,288 @@ adminFlashcardSelect.addEventListener('change', async (e) => {
     }
 });
 
+// ==========================================
+// 13. 基本功道場 (自動出題與批改系統)
+// ==========================================
+
+// 🎯 題型產生器物件庫 (隨機產生數字與標準答案)
+// ➕ 輔助函式 1：計算最大公因數並回傳最簡分數的「字串」(例如: "3/2", "-5")
+function getFractionStr(num, den) {
+    if (num === 0) return "0";
+    let sign = (num * den < 0) ? "-" : "";
+    num = Math.abs(num);
+    den = Math.abs(den);
+    const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+    let g = gcd(num, den);
+    num /= g;
+    den /= g;
+    return den === 1 ? `${sign}${num}` : `${sign}${num}/${den}`;
+}
+
+// ➕ 輔助函式 2：將 "3/2" 轉換為 KaTeX 美觀的分數語法 "\frac{3}{2}"
+function toKaTeXFrac(fracStr) {
+    if (!fracStr.includes('/')) return fracStr;
+    let parts = fracStr.split('/');
+    let sign = parts[0].includes('-') ? '-' : '';
+    let num = parts[0].replace('-', '');
+    return `${sign}\\frac{${num}}{${parts[1]}}`;
+}
+
+// ➕ 輔助函式 3：精準解析字串中的 $...$ 並渲染為 KaTeX，保留一般文字
+function renderMixedMath(text) {
+    if (!text) return "";
+    return text.replace(/\$([^\$]+)\$/g, (match, math) => {
+        try {
+            return katex.renderToString(math, { throwOnError: false });
+        } catch (e) {
+            return match; // 渲染失敗則保留原樣
+        }
+    });
+}
+
+// 🎯 題型產生器物件庫 (隨機產生數字與標準答案)
+const questionGenerators = {
+    'linear-equation': () => {
+        let x1, y1, x2, y2;
+        do {
+            x1 = Math.floor(Math.random() * 11) - 5; 
+            y1 = Math.floor(Math.random() * 11) - 5;
+            x2 = Math.floor(Math.random() * 11) - 5;
+            y2 = Math.floor(Math.random() * 11) - 5;
+        } while (x1 === x2 && y1 === y2);
+
+        let a = y2 - y1;
+        let b = -(x2 - x1);
+        let c = -(x1 * a) - (y1 * b);
+
+        const gcd = (x, y) => y === 0 ? Math.abs(x) : gcd(y, x % y);
+        let g = gcd(gcd(Math.abs(a), Math.abs(b)), Math.abs(c));
+        if (g !== 0) { a /= g; b /= g; c /= g; }
+        if (a < 0 || (a === 0 && b < 0)) { a = -a; b = -b; c = -c; }
+
+        return {
+            question: `已知直線 $L$ 通過 $(${x1}, ${y1})$ 與 $(${x2}, ${y2})$ 兩點，求 $L$ 的直線一般式。`,
+            template: "{} $x$ + {} $y$ + {} $= 0$",
+            answer: [a.toString(), b.toString(), c.toString()],
+            hint: "若係數為負，請直接在格子輸入負號 (例如: -3)。首項係數請化為正整數。"
+        };
+    },
+    'quadratic-find-vertex': () => {
+        let a = Math.floor(Math.random() * 6) - 3;
+        if (a >= 0) a++; 
+        let b = Math.floor(Math.random() * 11) - 5; 
+        let c = Math.floor(Math.random() * 11) - 5; 
+
+        let hStr = getFractionStr(-b, 2 * a);
+        let kStr = getFractionStr(4 * a * c - b * b, 4 * a);
+
+        let qStr = "";
+        if (a === 1) qStr += "x^2"; else if (a === -1) qStr += "-x^2"; else qStr += `${a}x^2`;
+        if (b !== 0) {
+            if (b > 0) qStr += ` + ${b === 1 ? 'x' : b + 'x'}`;
+            else qStr += ` - ${Math.abs(b) === 1 ? 'x' : Math.abs(b) + 'x'}`;
+        }
+        if (c !== 0) {
+            if (c > 0) qStr += ` + ${c}`; else qStr += ` - ${Math.abs(c)}`;
+        }
+        if (b === 0 && c === 0 && Math.abs(a) !== 1) qStr = `${a}x^2`;
+
+        return {
+            question: `已知二次函數 $f(x) = ${qStr}$，請回答其圖形的開口方向與對稱點座標。`,
+            template: "開口向 {} ，對稱點 ( {}, {} )",
+            answer: [a > 0 ? "上" : "下", hStr, kStr],
+            hint: "若為分數請用 / 表示 (例如: 1/2)。開口請填「上」或「下」。"
+        };
+    },
+    'quadratic-build': () => {
+        let a = Math.floor(Math.random() * 6) - 3;
+        if (a >= 0) a++; 
+        let b = Math.floor(Math.random() * 11) - 5;
+        let c = Math.floor(Math.random() * 11) - 5;
+
+        let hStr = getFractionStr(-b, 2 * a);
+        let kStr = getFractionStr(4 * a * c - b * b, 4 * a);
+
+        let direction = a > 0 ? "上" : "下";
+        let shapeStr = Math.abs(a) === 1 ? "x^2" : `${Math.abs(a)}x^2`;
+
+        return {
+            question: `已知二次函數圖形開口向${direction}，平移後可與 $y = ${shapeStr}$ 疊合。若其對稱點為 $(${toKaTeXFrac(hStr)}, ${toKaTeXFrac(kStr)})$，將此函數展開為 $f(x) = ax^2 + bx + c$。`,
+            template: "$a=$ {}, $b=$ {}, $c=$ {}",
+            answer: [a.toString(), b.toString(), c.toString()],
+            hint: "請依序填入 a, b, c 的數值。"
+        };
+    },
+    'abs-inequality': () => {
+        let den = Math.floor(Math.random() * 3) + 1; 
+        let centerNum = Math.floor(Math.random() * 15) - 7;
+        let radiusNum = Math.floor(Math.random() * 10) + 1; 
+        
+        let MStr = getFractionStr(centerNum - radiusNum, den);
+        let NStr = getFractionStr(centerNum + radiusNum, den);
+
+        let centerStr = getFractionStr(centerNum, den);
+        let centerKaTeX = centerNum > 0 ? `- ${toKaTeXFrac(centerStr)}` : (centerNum < 0 ? `+ ${toKaTeXFrac(centerStr.replace('-', ''))}` : "");
+        let radiusKaTeX = toKaTeXFrac(getFractionStr(radiusNum, den));
+
+        return {
+            question: `解不等式：$\\left| x ${centerKaTeX} \\right| \\le ${radiusKaTeX}$`,
+            template: "下界 {} $\\le x \\le$ 上界 {}",
+            answer: [MStr, NStr],
+            hint: "請填寫 x 的範圍，分數請用 / (例如: -1/2)。"
+        };
+    },
+    'am-gm-inequality': () => {
+        const a = Math.floor(Math.random() * 5) + 1;
+        const b = Math.floor(Math.random() * 5) + 1;
+        const k = Math.floor(Math.random() * 3) + 1;
+        const V = a * b * k; 
+        const c = (V / a) * (V / b); 
+
+        return {
+            question: `已知 $x > 0, y > 0$ 且 $xy = ${c}$，求 $${a === 1 ? 'x' : a+'x'} + ${b === 1 ? 'y' : b+'y'}$ 的最小值。`,
+            template: "最小值 = {}",
+            answer: [(2 * V).toString()],
+            hint: "請直接輸入最小值的整數。"
+        };
+    },
+    'polynomial-remainder': () => {
+        const A = Math.floor(Math.random() * 4) + 1; 
+        const B = Math.floor(Math.random() * 9) - 4;
+        const C = Math.floor(Math.random() * 9) - 4;
+        const D = Math.floor(Math.random() * 9) - 4;
+        const a = Math.floor(Math.random() * 2) + 1; 
+        let b = Math.floor(Math.random() * 7) - 3; 
+        if (b === 0) b = 1;
+
+        const num = A * Math.pow(b, 3) + B * Math.pow(b, 2) * a + C * b * Math.pow(a, 2) + D * Math.pow(a, 3);
+        const den = Math.pow(a, 3);
+
+        let polyStr = `${A === 1 ? '' : A}x^3`;
+        if (B > 0) polyStr += ` + ${B === 1 ? '' : B}x^2`; else if (B < 0) polyStr += ` - ${Math.abs(B) === 1 ? '' : Math.abs(B)}x^2`;
+        if (C > 0) polyStr += ` + ${C === 1 ? '' : C}x`; else if (C < 0) polyStr += ` - ${Math.abs(C) === 1 ? '' : Math.abs(C)}x`;
+        if (D > 0) polyStr += ` + ${D}`; else if (D < 0) polyStr += ` - ${Math.abs(D)}`;
+
+        let divisorStr = a === 1 ? (b > 0 ? `x - ${b}` : `x + ${Math.abs(b)}`) : (b > 0 ? `${a}x - ${b}` : `${a}x + ${Math.abs(b)}`);
+
+        return {
+            question: `已知多項式 $f(x) = ${polyStr}$，求 $f(x)$ 除以 $${divisorStr}$ 的餘式。`,
+            template: "餘式 = {}",
+            answer: [getFractionStr(num, den)],
+            hint: "分數請化為最簡並用 / 表示 (例如: -5/8)。"
+        };
+    }
+};
+// 單元名稱對照表
+// 單元名稱對照表 (對應按鈕 data-topic)
+const topicNames = {
+    'linear-equation': "直線方程式：求一般式",
+    'quadratic-find-vertex': "二次函數：求對稱點",
+    'quadratic-build': "二次函數：求方程式",
+    'abs-inequality': "絕對值不等式",
+    'am-gm-inequality': "算幾不等式",
+    'polynomial-remainder': "多項式求餘式"
+};
+
+// 🎮 事件：點擊單元按鈕，進入練功房
+if (basicSkillsSelection) {
+    document.querySelectorAll('.skill-topic-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            currentPracticeTopic = e.target.getAttribute('data-topic');
+            practiceTopicTitle.innerText = `🎯 修練中：${topicNames[currentPracticeTopic]}`;
+            
+            basicSkillsSelection.style.display = 'none';
+            basicSkillsPracticeRoom.style.display = 'block';
+            
+            generateNewQuestion(); // 進入立刻出題
+        });
+    });
+}
+
+// 🧠 核心：產生新題目並渲染骨幹
+function generateNewQuestion() {
+    practiceSubmitBtn.style.display = "inline-block";
+    practiceFeedbackArea.style.display = "none";
+    
+    const qData = questionGenerators[currentPracticeTopic]();
+    currentPracticeAnswer = qData.answer; // 現在這是一個陣列 (例如 ["2", "-3", "4"])
+    
+    // 1. 渲染題目 (解決金錢符號問題)
+    practiceQuestionDisplay.innerHTML = renderMixedMath(qData.question);
+    
+    // 2. 顯示提示字 (移到輸入框上方)
+    document.getElementById('practice-hint-text').innerText = "💡 " + (qData.hint || "請填寫答案");
+    
+    // 3. 渲染骨幹填空 (把 {} 換成 input，並同時渲染骨幹裡的數學符號)
+    const container = document.getElementById('practice-answer-container');
+    if (qData.template) {
+        let renderedTemplate = renderMixedMath(qData.template);
+        container.innerHTML = renderedTemplate.replace(/\{\}/g, `<input type="text" class="practice-sk-input" style="width: 70px; padding: 10px; text-align: center; border: 2px solid #bdc3c7; border-radius: 8px; font-size: 18px; outline: none; margin: 0 5px;">`);
+    }
+
+    // 自動聚焦第一個填空框
+    const firstInput = container.querySelector('.practice-sk-input');
+    if (firstInput) firstInput.focus();
+}
+
+// 🎯 事件：送出答案驗證 (支援多個空格)
+if (practiceSubmitBtn) {
+    practiceSubmitBtn.addEventListener('click', () => {
+        const inputs = document.querySelectorAll('.practice-sk-input');
+        // 收集所有學生的輸入值，並清掉空白
+        const userAnswers = Array.from(inputs).map(inp => inp.value.replace(/\s+/g, ""));
+        
+        // 檢查是不是還有空格沒填
+        if (userAnswers.some(ans => ans === "")) {
+            alert("還有空格尚未填寫喔！");
+            return;
+        }
+        
+        practiceSubmitBtn.style.display = "none";
+        practiceFeedbackArea.style.display = "block";
+        inputs.forEach(inp => inp.disabled = true);
+        
+        // 逐一比對答案陣列
+        let isCorrect = true;
+        for (let i = 0; i < userAnswers.length; i++) {
+            if (userAnswers[i] !== currentPracticeAnswer[i]) {
+                isCorrect = false;
+                break;
+            }
+        }
+        
+        if (isCorrect) {
+            inputs.forEach(inp => { inp.style.borderColor = "#27ae60"; inp.style.backgroundColor = "#eafaf1"; });
+            practiceFeedbackArea.style.backgroundColor = "#e8f8f5";
+            practiceFeedbackText.style.color = "#27ae60";
+            practiceFeedbackText.innerText = "✅ 正確！太棒了！";
+        } else {
+            inputs.forEach(inp => { inp.style.borderColor = "#e74c3c"; inp.style.backgroundColor = "#fdedec"; });
+            practiceFeedbackArea.style.backgroundColor = "#fadbd8";
+            practiceFeedbackText.style.color = "#c0392b";
+            // 將陣列格式的正確答案轉為閱讀友善的字串
+            const correctStr = currentPracticeAnswer.join(" , ");
+            practiceFeedbackText.innerHTML = `❌ 答錯囉！<br><span style="font-size:16px; font-weight:normal; color:#7f8c8d; display:block; margin-top:10px;">這題的正確數值依序是：${correctStr}</span>`;
+        }
+    });
+    
+    // 支援在任一填空框按下 Enter 鍵送出
+    document.getElementById('practice-answer-container').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            practiceSubmitBtn.click();
+        }
+    });
+}
+
+// 🔄 事件：再練一題
+if (practiceNextBtn) {
+    practiceNextBtn.addEventListener('click', generateNewQuestion);
+}
+
+// 🚪 事件：退出修練
+if (exitPracticeBtn) {
+    exitPracticeBtn.addEventListener('click', () => {
+        basicSkillsPracticeRoom.style.display = 'none';
+        basicSkillsSelection.style.display = 'block';
+    });
+}
